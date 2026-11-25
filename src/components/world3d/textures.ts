@@ -320,6 +320,75 @@ export function createActionStandTexture(
   return tex;
 }
 
+export function createDealBillboardTexture(listing: ListingDTO): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 320;
+  const ctx = canvas.getContext("2d")!;
+
+  const grad = ctx.createLinearGradient(0, 0, 1024, 320);
+  grad.addColorStop(0, "#190a35");
+  grad.addColorStop(0.55, "#2f1152");
+  grad.addColorStop(1, "#0e2b45");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 320);
+
+  ctx.strokeStyle = "#00f0ff";
+  ctx.lineWidth = 10;
+  ctx.strokeRect(12, 12, 1000, 296);
+
+  // Top hot-pink banner pill
+  ctx.fillStyle = "#ff2a9d";
+  ctx.beginPath();
+  ctx.roundRect(42, 34, 360, 50, 14);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 26px 'Plus Jakarta Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("★ OFERTA DEL DÍA PY ★", 222, 60);
+
+  // Giant savings pill
+  if (listing.savingsPercent) {
+    ctx.fillStyle = "#059669";
+    ctx.beginPath();
+    ctx.roundRect(720, 32, 260, 68, 18);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 38px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(`-${listing.savingsPercent}% NUEVO`, 850, 67);
+  }
+
+  // Listing Title
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 44px 'Plus Jakarta Sans', sans-serif";
+  const shortTitle =
+    listing.title.length > 38 ? `${listing.title.slice(0, 37)}…` : listing.title;
+  ctx.fillText(shortTitle, 44, 148, 920);
+
+  // Price & reference
+  const priceStr = formatPrice(listing.price, listing.currency, listing.isFree);
+  ctx.fillStyle = "#34d399";
+  ctx.font = "900 50px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText(priceStr, 44, 224);
+
+  if (listing.referenceNewPrice) {
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "700 28px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(
+      `Nuevo ref.: ${formatPrice(listing.referenceNewPrice, listing.currency)}   ·   Tocá esta cartelera para abrir`,
+      380,
+      228,
+      600
+    );
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function loadProductImageMaterial(url?: string): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
