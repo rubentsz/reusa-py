@@ -1,26 +1,113 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --win-bg: #eef3f9;
+  --win-mica: rgba(248, 250, 253, 0.9);
+  --win-acrylic: rgba(255, 255, 255, 0.84);
+  --win-border: rgba(15, 23, 42, 0.11);
+  --win-highlight: rgba(255, 255, 255, 0.72);
+  --win-accent: #0067c0;
+  --win-accent-hover: #0058a6;
+  --reusa-emerald: #059669;
+  --reusa-emerald-soft: #ecfdf5;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jakarta), "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--win-bg);
+  color: var(--text-primary);
+  font-family: var(--font-jakarta), "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Windows 11 Desktop Acrylic & Mica surfaces */
+.win-mica {
+  background: var(--win-mica);
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+}
+
+.win-acrylic {
+  background: var(--win-acrylic);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.win-window-shadow {
+  box-shadow:
+    0 24px 60px -12px rgba(15, 23, 42, 0.22),
+    0 8px 24px -6px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.win-window-shadow-inactive {
+  box-shadow:
+    0 12px 32px -8px rgba(15, 23, 42, 0.12),
+    0 0 0 1px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.win-taskbar {
+  background: rgba(243, 247, 252, 0.84);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+  border-top: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 -2px 16px rgba(15, 23, 42, 0.08);
+}
+
+.win-desktop-bg {
+  background-image: url("/wallpaper.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Subtle custom scrollbars */
+.fluent-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.fluent-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.fluent-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.32);
+  border-radius: 9999px;
+}
+
+.fluent-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.52);
+}
+
+/* Hide scrollbar on horizontal mobile strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe area padding for mobile PWA bottom nav */
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Leaflet overrides for clean z-index inside windows */
+.leaflet-container {
+  font-family: inherit !important;
+  z-index: 1;
 }

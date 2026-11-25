@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Country {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  departments Department[]
+}
+
+model Department {
+  id        String    @id @default(cuid())
+  countryId String
+  country   Country   @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String    @unique
+  lat       Float
+  lng       Float
+  cities    City[]
+  listings  Listing[]
+  users     User[]
+}
+
+model City {
+  id            String         @id @default(cuid())
+  departmentId  String
+  department    Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String         @unique
+  lat           Float
+  lng           Float
+  neighborhoods Neighborhood[]
+  listings      Listing[]
+  users         User[]
+}
+
+model Neighborhood {
+  id       String    @id @default(cuid())
+  cityId   String
+  city     City      @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  name     String
+  slug     String    @unique
+  lat      Float
+  lng      Float
+  listings Listing[]
+}
+
+model Category {
+  id                 String     @id @default(cuid())
+  name               String
+  slug               String     @unique
+  icon               String     @default("Package")
+  verticalType       String     @default("GENERAL") // GENERAL | VEHICLE | REAL_ESTATE | APPAREL
+  order              Int        @default(0)
+  parentId           String?
+  parent             Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children           Category[] @relation("CategoryTree")
+  listings           Listing[]  @relation("PrimaryCategory")
+  subcategoryListings Listing[] @relation("SubCategory")
+}
+
+model User {
+  id                    String         @id @default(cuid())
+  name                  String
+  email                 String         @unique
+  passwordHash          String
+  avatarUrl             String?
+  bio                   String?
+  whatsappPhone         String?
+  showWhatsappByDefault Boolean        @default(true)
+  role                  String         @default("USER") // USER | ADMIN
+  departmentId          String?
+  department            Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  cityId                String?
+  city                  City?          @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  listings              Listing[]
+  favorites             Favorite[]
+  savedSearches         SavedSearch[]
+  notifications         Notification[]
+  buyerConversations    Conversation[] @relation("BuyerConversations")
+  sellerConversations   Conversation[] @relation("SellerConversations")
+  messages              Message[]
+  reviewsGiven          Review[]       @relation("ReviewAuthor")
+  reviewsReceived       Review[]       @relation("ReviewTarget")
+  reportsFiled          Report[]       @relation("ReportReporter")
+}
+
+model Listing {
+  id                   String        @id @default(cuid())
+  slug                 String        @unique
+  title                String
+  description          String
+  sellerId             String
+  seller               User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  categoryId           String
+  category             Category      @relation("PrimaryCategory", fields: [categoryId], references: [id])
+  subcategoryId        String?
+  subcategory          Category?     @relation("SubCategory", fields: [subcategoryId], references: [id])
+
+  status               String        @default("ACTIVE") // ACTIVE | RESERVED | SOLD | PAUSED
+  condition            String        @default("VERY_GOOD") // LIKE_NEW | VERY_GOOD | GOOD | WITH_DETAILS | FOR_PARTS
+  isFree               Boolean       @default(false)
+  currency             String        @default("PYG") // PYG | USD
+  price                Float         @default(0)
+  previousPrice        Float?
+
+  referenceNewPrice    Float?
+  referenceNewUrl      String?
+  savingsPercent       Int?
+
+  isNegotiable         Boolean       @default(false)
+  acceptsTrade         Boolean       @default(false)
+
+  pickupInPerson       Boolean       @default(true)
+  publicMeetup         Boolean       @default(false)
+  localDelivery        Boolean       @default(false)
+  localDeliveryFree    Boolean       @default(false)
+  nationalShipping     Boolean       @default(false)
+  nationalShippingFree Boolean       @default(false)
+  scheduleVisitOnly    Boolean       @default(false)
+
+  showWhatsapp         Boolean       @default(true)
+
+  departmentId         String
+  department           Department    @relation(fields: [departmentId], references: [id])
+  cityId               String
+  city                 City          @relation(fields: [cityId], references: [id])
+  neighborhoodId       String?
+  neighborhood         Neighborhood? @relation(fields: [neighborhoodId], references: [id])
+  approxLat            Float
+  approxLng            Float
+
+  // Vehicle specific fields
+  vehicleBrand         String?
+  vehicleModel         String?
+  vehicleYear          Int?
+  vehicleMileageKm     Int?
+  vehicleFuel          String?
+  vehicleTransmission  String?
+  vehicleDocs          String?
+
+  // Real estate specific fields
+  realEstateOperation  String?       // SALE | RENT
+  realEstateType       String?       // Casa | Departamento | Terreno | Duplex | Local
+  areaTotalM2          Float?
+  areaBuiltM2          Float?
+  bedrooms             Int?
+  bathrooms            Int?
+  parkingSpaces        Int?
+  furnished            Boolean?
+
+  // Apparel specific fields
+  apparelSize          String?
+  apparelBrand         String?
+  apparelGender        String?
+
+  // Future monetization readiness
+  isFeatured           Boolean       @default(false)
+  featuredUntil        DateTime?
+
+  viewsCount           Int           @default(0)
+  expiresAt            DateTime
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  images               ListingImage[]
+  favorites            Favorite[]
+  conversations        Conversation[]
+  reviews              Review[]
+  reports              Report[]
+
+  @@index([status, createdAt])
+  @@index([categoryId, status])
+  @@index([departmentId, cityId, status])
+  @@index([currency, price])
+  @@index([savingsPercent])
+}
+
+model ListingImage {
+  id        String  @id @default(cuid())
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  order     Int     @default(0)
+  isCover   Boolean @default(false)
+
+  @@index([listingId, order])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  listingId String
+  listing   Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyerId   String
+  buyer     User      @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId  String
+  seller    User      @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@unique([listingId, buyerId])
+  @@index([buyerId, updatedAt])
+  @@index([sellerId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Favorite {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  savedPrice Float
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, listingId])
+}
+
+model SavedSearch {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  queryJson     String
+  lastCheckedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // MESSAGE | PRICE_DROP | FAV_STATUS | SAVED_SEARCH | REVIEW | MODERATION
+  title     String
+  body      String
+  linkUrl   String?
+  listingId String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  authorId     String
+  author       User     @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  targetUserId String
+  targetUser   User     @relation("ReviewTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  listingId    String?
+  listing      Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  rating       Int
+  comment      String
+  createdAt    DateTime @default(now())
+
+  @@index([targetUserId, createdAt])
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  listingId     String
+  listing       Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporterId    String
+  reporter      User      @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason        String
+  details       String?
+  status        String    @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  moderatorNote String?
+  createdAt     DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  @@index([status, createdAt])
+}

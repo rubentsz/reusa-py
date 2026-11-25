@@ -1,0 +1,18 @@
+{
+  "name": "ReUsa PY — Clasificados de Usados en Paraguay",
+  "short_name": "ReUsa PY",
+  "description": "Comprá y vendé productos usados en Paraguay en PYG y USD, comparando ahorro contra el producto nuevo. Desde medias hasta autos y casas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#0067c0",
+  "lang": "es-PY",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
