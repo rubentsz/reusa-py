@@ -1,6 +1,7 @@
 function isPostgresUrl(val?: string): val is string {
   if (!val) return false;
-  return val.startsWith("postgres://") || val.startsWith("postgresql://");
+  const trimmed = val.trim();
+  return trimmed.startsWith("postgres://") || trimmed.startsWith("postgresql://");
 }
 
 const RUNTIME_CANDIDATES = [
@@ -18,14 +19,14 @@ export function resolveRuntimeDatabaseUrl(): { url: string | null; sourceKey: st
   for (const key of RUNTIME_CANDIDATES) {
     const val = process.env[key];
     if (isPostgresUrl(val)) {
-      return { url: val, sourceKey: key };
+      return { url: val.trim(), sourceKey: key };
     }
   }
 
-  // Fallback: scan any prefixed Vercel Marketplace Postgres env var (e.g. STORAGE_DATABASE_URL)
+  // Fallback: detect ANY env variable whose value is a postgres:// or postgresql:// URI
   for (const [key, val] of Object.entries(process.env)) {
-    if (/(DATABASE|POSTGRES|NEON|SUPABASE).*URL/i.test(key) && isPostgresUrl(val)) {
-      return { url: val, sourceKey: key };
+    if (isPostgresUrl(val)) {
+      return { url: val.trim(), sourceKey: key };
     }
   }
 

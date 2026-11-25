@@ -1,11 +1,12 @@
 import { execSync } from "node:child_process";
 
 function isPostgresUrl(val) {
-  return Boolean(val && (val.startsWith("postgres://") || val.startsWith("postgresql://")));
+  if (!val) return false;
+  const t = val.trim();
+  return t.startsWith("postgres://") || t.startsWith("postgresql://");
 }
 
 function resolveMigrationUrl() {
-  // Prefer unpooled/direct URL for Prisma DDL (db push) to avoid PgBouncer issues on Neon/Supabase/Prisma Postgres
   const preferred = [
     "DATABASE_URL_UNPOOLED",
     "POSTGRES_URL_NON_POOLING",
@@ -16,12 +17,12 @@ function resolveMigrationUrl() {
   ];
   for (const key of preferred) {
     if (isPostgresUrl(process.env[key])) {
-      return { url: process.env[key], key };
+      return { url: process.env[key].trim(), key };
     }
   }
   for (const [key, val] of Object.entries(process.env)) {
-    if (/(DATABASE|POSTGRES|NEON|SUPABASE).*URL/i.test(key) && isPostgresUrl(val)) {
-      return { url: val, key };
+    if (isPostgresUrl(val)) {
+      return { url: val.trim(), key };
     }
   }
   return { url: "", key: null };
@@ -43,7 +44,7 @@ if (dbUrl) {
   run("npx tsx prisma/seed.ts", buildEnv);
 } else {
   console.warn(
-    "⚠ No se encontró una variable PostgreSQL (postgres:// o postgresql://) durante el build. Conectá Neon, Supabase o Prisma Postgres en Vercel Storage y hacé Redeploy."
+    "⚠ No se encontró una variable PostgreSQL (postgres:// o postgresql://) durante el build."
   );
 }
 
