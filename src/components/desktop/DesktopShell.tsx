@@ -14,6 +14,7 @@ import {
   Plus,
   Shield,
   Smartphone,
+  Sparkles,
   Tag,
   User,
 } from "lucide-react";
@@ -55,6 +56,7 @@ export function DesktopShell() {
     markNotificationRead,
     unreadChatCount,
     setForceViewMode,
+    setExperienceMode,
   } = useApp();
 
   const [startOpen, setStartOpen] = useState(false);
@@ -293,11 +295,20 @@ export function DesktopShell() {
 
       {/* Windows 11 Bottom Taskbar */}
       <footer className="win-taskbar fixed inset-x-0 bottom-0 z-[950] flex h-12 items-center justify-between px-3">
-        {/* Left: Paraguay Weather/Currency & Mobile Preview Toggle */}
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 xl:flex">
+        {/* Left: Vice City 3D Switcher, Paraguay status & Mobile Preview Toggle */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setExperienceMode("world3d")}
+            title="Volver al Mundo 3D Vice City"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#ff2a9d] to-[#00b4d8] px-2.5 py-1 text-[11px] font-extrabold text-white shadow-xs transition hover:brightness-110"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Vice City 3D</span>
+          </button>
+          <div className="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 2xl:flex">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span>Paraguay · PYG / USD</span>
+            <span>PYG / USD</span>
           </div>
           <button
             type="button"

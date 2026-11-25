@@ -1,8 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { AppProvider, useApp, type WindowKind } from "@/components/AppContext";
 import { DesktopShell } from "@/components/desktop/DesktopShell";
 import { MobileShell } from "@/components/mobile/MobileShell";
+import type { WorldModal } from "@/components/world3d/ViceCityWorld";
 import type {
   CategoryDTO,
   DepartmentDTO,
@@ -10,12 +12,36 @@ import type {
   UserDTO,
 } from "@/types/marketplace";
 
-function ShellRouter() {
-  const { effectiveMode, toasts } = useApp();
+const ViceCityWorld = dynamic(
+  () => import("@/components/world3d/ViceCityWorld").then((m) => m.ViceCityWorld),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-dvh w-screen flex-col items-center justify-center bg-gradient-to-b from-[#150a2d] via-[#3a1554] to-[#ff6b6b] text-white">
+        <img src="/icons/icon.svg" alt="ReUsa PY" className="h-14 w-14 rounded-2xl shadow-xl" />
+        <h1 className="mt-4 bg-gradient-to-r from-[#00f0ff] via-white to-[#ff4fd8] bg-clip-text text-2xl font-black italic tracking-tight text-transparent">
+          REUSA VICE PY 3D
+        </h1>
+        <p className="mt-1.5 text-xs font-semibold text-cyan-200">
+          Cargando Ocean Boulevard y tus 10 tiendas en 3D...
+        </p>
+      </div>
+    ),
+  }
+);
+
+function ShellRouter({ initialModal }: { initialModal?: WorldModal }) {
+  const { experienceMode, effectiveMode, toasts } = useApp();
 
   return (
     <>
-      {effectiveMode === "mobile" ? <MobileShell /> : <DesktopShell />}
+      {experienceMode === "world3d" ? (
+        <ViceCityWorld initialModal={initialModal} />
+      ) : effectiveMode === "mobile" ? (
+        <MobileShell />
+      ) : (
+        <DesktopShell />
+      )}
 
       {/* Fluent Toast Notifications */}
       {toasts.length > 0 && (
@@ -57,6 +83,30 @@ export function ReUsaShell({
     title?: string;
   };
 }) {
+  const initialModal: WorldModal = (() => {
+    if (!initialRoute || initialRoute.kind === "explorer") return null;
+    if (initialRoute.kind === "listing" && initialRoute.payload?.slug) {
+      return {
+        kind: "listing",
+        slug: initialRoute.payload.slug,
+        title: initialRoute.title,
+      };
+    }
+    if (initialRoute.kind === "publish") {
+      return { kind: "publish", editId: initialRoute.payload?.editId };
+    }
+    if (initialRoute.kind === "chat") {
+      return { kind: "chat", conversationId: initialRoute.payload?.conversationId };
+    }
+    if (initialRoute.kind === "profile") {
+      return { kind: "profile", userId: initialRoute.payload?.userId };
+    }
+    if (initialRoute.kind === "admin") return { kind: "admin" };
+    if (initialRoute.kind === "favorites") return { kind: "favorites" };
+    if (initialRoute.kind === "auth") return { kind: "auth" };
+    return null;
+  })();
+
   return (
     <AppProvider
       initialData={{
@@ -67,7 +117,7 @@ export function ReUsaShell({
         initialRoute,
       }}
     >
-      <ShellRouter />
+      <ShellRouter initialModal={initialModal} />
     </AppProvider>
   );
 }

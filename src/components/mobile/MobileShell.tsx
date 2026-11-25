@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Monitor,
   Plus,
+  Sparkles,
   User,
 } from "lucide-react";
 import { useApp } from "@/components/AppContext";
@@ -41,6 +42,7 @@ export function MobileShell() {
     isMobileViewport,
     forceViewMode,
     setForceViewMode,
+    setExperienceMode,
   } = useApp();
 
   const [notifOpen, setNotifOpen] = useState(false);
@@ -60,13 +62,20 @@ export function MobileShell() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setExperienceMode("world3d")}
+            className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#ff2a9d] to-[#00b4d8] px-2.5 py-1 text-[11px] font-extrabold text-white shadow-sm"
+          >
+            <Sparkles className="h-3 w-3" /> 3D Vice
+          </button>
           {isDesktopPreviewingMobile && (
             <button
               type="button"
               onClick={() => setForceViewMode("auto")}
               className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white"
             >
-              <Monitor className="h-3 w-3" /> Volver a Windows OS
+              <Monitor className="h-3 w-3" /> Windows OS
             </button>
           )}
           <button

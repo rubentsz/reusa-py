@@ -106,6 +106,31 @@ interface AppContextValue {
   moveWindow: (id: string, x: number, y: number) => void;
   snapWindow: (id: string, side: "left" | "right") => void;
 
+  // 3D Vice City vs Classic OS/App mode
+  experienceMode: "world3d" | "classic";
+  setExperienceMode: (m: "world3d" | "classic") => void;
+  worldModal:
+    | { kind: "listing"; slug: string; title?: string }
+    | { kind: "publish"; editId?: string }
+    | { kind: "chat"; conversationId?: string }
+    | { kind: "favorites" }
+    | { kind: "profile"; userId?: string }
+    | { kind: "auth" }
+    | { kind: "admin" }
+    | null;
+  setWorldModal: React.Dispatch<
+    React.SetStateAction<
+      | { kind: "listing"; slug: string; title?: string }
+      | { kind: "publish"; editId?: string }
+      | { kind: "chat"; conversationId?: string }
+      | { kind: "favorites" }
+      | { kind: "profile"; userId?: string }
+      | { kind: "auth" }
+      | { kind: "admin" }
+      | null
+    >
+  >;
+
   // Mobile App navigation
   isMobileViewport: boolean;
   forceViewMode: "auto" | "desktop" | "mobile";
@@ -233,6 +258,9 @@ export function AppProvider({
   const [unreadChatCount, setUnreadChatCount] = useState<number>(0);
   const [savedSearches, setSavedSearches] = useState<SavedSearchDTO[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const [experienceMode, setExperienceMode] = useState<"world3d" | "classic">("world3d");
+  const [worldModal, setWorldModal] = useState<AppContextValue["worldModal"]>(null);
 
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(false);
   const [forceViewMode, setForceViewMode] = useState<"auto" | "desktop" | "mobile">("auto");
@@ -628,17 +656,25 @@ export function AppProvider({
 
   // Cross-shell helpers
   const openAuth = useCallback(() => {
+    if (experienceMode === "world3d") {
+      setWorldModal({ kind: "auth" });
+      return;
+    }
     if (effectiveMode === "mobile") {
       setMobileOverlay({ kind: "auth" });
     } else {
       openWindow("auth", { title: "Ingresar a ReUsa PY" });
     }
-  }, [effectiveMode, openWindow]);
+  }, [effectiveMode, experienceMode, openWindow]);
 
   const openListing = useCallback(
     (slug: string, title?: string) => {
       if (typeof window !== "undefined") {
         window.history.replaceState(null, "", `/aviso/${slug}`);
+      }
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "listing", slug, title });
+        return;
       }
       if (effectiveMode === "mobile") {
         setMobileOverlay({ kind: "listing", payload: { slug } });
@@ -650,7 +686,7 @@ export function AppProvider({
         });
       }
     },
-    [effectiveMode, openWindow]
+    [effectiveMode, experienceMode, openWindow]
   );
 
   const openChat = useCallback(
@@ -658,6 +694,11 @@ export function AppProvider({
       if (!user) {
         notifyToast("Iniciá sesión para acceder a tus mensajes", "info");
         openAuth();
+        return;
+      }
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "chat", conversationId });
+        refreshConversations();
         return;
       }
       if (effectiveMode === "mobile") {
@@ -671,7 +712,7 @@ export function AppProvider({
       }
       refreshConversations();
     },
-    [effectiveMode, notifyToast, openAuth, openWindow, refreshConversations, user]
+    [effectiveMode, experienceMode, notifyToast, openAuth, openWindow, refreshConversations, user]
   );
 
   const openPublish = useCallback(
@@ -679,6 +720,10 @@ export function AppProvider({
       if (!user) {
         notifyToast("Iniciá sesión para publicar tus productos", "info");
         openAuth();
+        return;
+      }
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "publish", editId });
         return;
       }
       if (effectiveMode === "mobile") {
@@ -696,7 +741,7 @@ export function AppProvider({
         });
       }
     },
-    [effectiveMode, notifyToast, openAuth, openWindow, user]
+    [effectiveMode, experienceMode, notifyToast, openAuth, openWindow, user]
   );
 
   const openProfile = useCallback(
@@ -704,6 +749,10 @@ export function AppProvider({
       const targetId = userId || user?.id;
       if (!targetId) {
         openAuth();
+        return;
+      }
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "profile", userId: targetId });
         return;
       }
       if (effectiveMode === "mobile") {
@@ -721,17 +770,20 @@ export function AppProvider({
         });
       }
     },
-    [effectiveMode, openAuth, openWindow, user?.id]
+    [effectiveMode, experienceMode, openAuth, openWindow, user?.id]
   );
 
   const openMap = useCallback(() => {
+    if (experienceMode === "world3d") {
+      setExperienceMode("classic");
+    }
     if (effectiveMode === "mobile") {
       setMobileOverlay(null);
       setMobileTab("map");
     } else {
       openWindow("map", { title: "Mapa de Zonas — Paraguay" });
     }
-  }, [effectiveMode, openWindow]);
+  }, [effectiveMode, experienceMode, openWindow]);
 
   const openFavorites = useCallback(() => {
     if (!user) {
@@ -739,16 +791,24 @@ export function AppProvider({
       openAuth();
       return;
     }
+    if (experienceMode === "world3d") {
+      setWorldModal({ kind: "favorites" });
+      return;
+    }
     if (effectiveMode === "mobile") {
       setMobileOverlay({ kind: "favorites" });
     } else {
       openWindow("favorites", { title: "Favoritos y Alertas" });
     }
-  }, [effectiveMode, notifyToast, openAuth, openWindow, user]);
+  }, [effectiveMode, experienceMode, notifyToast, openAuth, openWindow, user]);
 
   const openAdmin = useCallback(() => {
     if (!user || user.role !== "ADMIN") {
       notifyToast("Acceso exclusivo para moderadores", "error");
+      return;
+    }
+    if (experienceMode === "world3d") {
+      setWorldModal({ kind: "admin" });
       return;
     }
     if (effectiveMode === "mobile") {
@@ -756,11 +816,15 @@ export function AppProvider({
     } else {
       openWindow("admin", { title: "Panel de Moderación — ReUsa PY" });
     }
-  }, [effectiveMode, notifyToast, openWindow, user]);
+  }, [effectiveMode, experienceMode, notifyToast, openWindow, user]);
 
   const openExplorerWithFilters = useCallback(
     (patch: Partial<ListingFilters>, resetFirst = false) => {
       setFilters((prev) => (resetFirst ? { ...DEFAULT_FILTERS, ...patch } : { ...prev, ...patch }));
+      if (experienceMode === "world3d") {
+        setWorldModal(null);
+        setExperienceMode("classic");
+      }
       if (effectiveMode === "mobile") {
         setMobileOverlay(null);
         setMobileTab("home");
@@ -768,7 +832,7 @@ export function AppProvider({
         openWindow("explorer", { title: "Explorador — ReUsa PY" });
       }
     },
-    [effectiveMode, openWindow]
+    [effectiveMode, experienceMode, openWindow]
   );
 
   const toggleFavorite = useCallback(
@@ -868,6 +932,10 @@ export function AppProvider({
       toggleMaximizeWindow,
       moveWindow,
       snapWindow,
+      experienceMode,
+      setExperienceMode,
+      worldModal,
+      setWorldModal,
       isMobileViewport,
       forceViewMode,
       setForceViewMode,
@@ -922,6 +990,8 @@ export function AppProvider({
       toggleMaximizeWindow,
       moveWindow,
       snapWindow,
+      experienceMode,
+      worldModal,
       isMobileViewport,
       forceViewMode,
       effectiveMode,
