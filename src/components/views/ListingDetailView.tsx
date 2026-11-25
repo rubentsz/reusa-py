@@ -13,12 +13,15 @@ import {
   Flag,
   Heart,
   Home,
+  Link2,
   MapPin,
+  Maximize2,
   MessageCircle,
   Pencil,
   Phone,
   RefreshCw,
   Repeat,
+  Share2,
   ShieldAlert,
   Shirt,
   Star,
@@ -26,6 +29,7 @@ import {
   Trash2,
   Truck,
   Users,
+  X,
 } from "lucide-react";
 import type { ListingDTO, ListingStatus } from "@/types/marketplace";
 import { useApp } from "@/components/AppContext";
@@ -63,6 +67,7 @@ export function ListingDetailView({
   const [listing, setListing] = useState<ListingDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // Owner quick actions
   const [showDropPrice, setShowDropPrice] = useState(false);
@@ -84,6 +89,7 @@ export function ListingDetailView({
         if (active && data?.listing) {
           setListing(data.listing);
           setActivePhotoIdx(0);
+          setLightboxOpen(false);
         }
       })
       .finally(() => {
@@ -93,6 +99,23 @@ export function ListingDetailView({
       active = false;
     };
   }, [slug]);
+
+  useEffect(() => {
+    if (!lightboxOpen || !listing) return;
+    const total = listing.images.length;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setLightboxOpen(false);
+      } else if (e.key === "ArrowLeft" && total > 1) {
+        setActivePhotoIdx((i) => (i === 0 ? total - 1 : i - 1));
+      } else if (e.key === "ArrowRight" && total > 1) {
+        setActivePhotoIdx((i) => (i === total - 1 ? 0 : i + 1));
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [lightboxOpen, listing]);
 
   if (loading) {
     return (
@@ -334,13 +357,24 @@ export function ListingDetailView({
         <div className="space-y-4 md:col-span-7">
           {/* Photo Gallery */}
           <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-            <div className="relative aspect-[4/3] w-full bg-slate-900/5">
+            <div className="group relative aspect-[4/3] w-full bg-slate-900/5">
               {currentImg && (
                 <img
                   src={currentImg}
                   alt={listing.title}
-                  className="h-full w-full object-cover"
+                  onClick={() => setLightboxOpen(true)}
+                  className="h-full w-full cursor-zoom-in object-cover transition duration-300 group-hover:scale-[1.01]"
                 />
+              )}
+              {currentImg && (
+                <button
+                  type="button"
+                  onClick={() => setLightboxOpen(true)}
+                  title="Ampliar foto en pantalla completa"
+                  className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-slate-900/75 px-2.5 py-1 text-[11px] font-semibold text-white shadow-md backdrop-blur-xs transition hover:bg-slate-900"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" /> Ampliar
+                </button>
               )}
               {images.length > 1 && (
                 <>
@@ -723,6 +757,44 @@ export function ListingDetailView({
                 )}
               </div>
             )}
+
+            {/* Share Listing Row */}
+            <div className="mt-3.5 flex items-center gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetUrl =
+                    shareUrl || `https://reusa-py.vercel.app/aviso/${listing.slug}`;
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard
+                      .writeText(targetUrl)
+                      .then(() => notifyToast("Enlace del aviso copiado", "success"))
+                      .catch(() => notifyToast("No se pudo copiar el enlace", "error"));
+                  } else {
+                    notifyToast(targetUrl, "info");
+                  }
+                }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+              >
+                <Link2 className="h-3.5 w-3.5 text-[#0067c0]" />
+                Copiar enlace
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `Mirá este aviso en ReUsa PY: ${listing.title} (${formatPrice(
+                    listing.price,
+                    listing.currency,
+                    listing.isFree
+                  )}) ${shareUrl || ""}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Compartir WhatsApp
+              </a>
+            </div>
           </div>
 
           {/* Delivery & Pickup Options Card */}
@@ -884,6 +956,69 @@ export function ListingDetailView({
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Photo Lightbox */}
+      {lightboxOpen && currentImg && (
+        <div
+          onClick={() => setLightboxOpen(false)}
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/92 p-4 backdrop-blur-md"
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            aria-label="Cerrar foto"
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-rose-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivePhotoIdx((i) => (i === 0 ? images.length - 1 : i - 1));
+                }}
+                aria-label="Foto anterior"
+                className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/30"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivePhotoIdx((i) => (i === images.length - 1 ? 0 : i + 1));
+                }}
+                aria-label="Siguiente foto"
+                className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/30"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            </>
+          )}
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[88dvh] max-w-[92vw] flex-col items-center gap-3"
+          >
+            <img
+              src={currentImg}
+              alt={listing.title}
+              className="max-h-[82dvh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
+            />
+            <div className="flex items-center gap-3 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-white">
+              <span className="max-w-[60vw] truncate">{listing.title}</span>
+              {images.length > 1 && (
+                <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px]">
+                  {activePhotoIdx + 1} / {images.length}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
