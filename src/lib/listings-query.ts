@@ -6,6 +6,17 @@ export const LISTING_INCLUDE = {
   images: { orderBy: { order: "asc" as const } },
   category: { select: { id: true, name: true, slug: true, icon: true, verticalType: true } },
   subcategory: { select: { id: true, name: true, slug: true } },
+  store: {
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      logoUrl: true,
+      neonColor: true,
+      planTier: true,
+      status: true,
+    },
+  },
   department: { select: { id: true, name: true, slug: true } },
   city: { select: { id: true, name: true, slug: true } },
   neighborhood: { select: { id: true, name: true, slug: true } },
@@ -55,6 +66,18 @@ export function serializeListing(
       avgRating,
       reviewCount,
     },
+    storeId: row.storeId,
+    store: row.store
+      ? {
+          id: row.store.id,
+          slug: row.store.slug,
+          name: row.store.name,
+          logoUrl: row.store.logoUrl,
+          neonColor: row.store.neonColor,
+          planTier: row.store.planTier as "BASIC" | "FEATURED" | "FLAGSHIP",
+          status: row.store.status as "PENDING" | "ACTIVE" | "PAUSED" | "EXPIRED",
+        }
+      : null,
     categoryId: row.categoryId,
     category: {
       ...row.category,
@@ -64,6 +87,8 @@ export function serializeListing(
     subcategory: row.subcategory,
     status: row.status as ListingDTO["status"],
     condition: row.condition,
+    sku: row.sku,
+    stockQuantity: row.stockQuantity,
     isFree: row.isFree,
     currency: row.currency as ListingDTO["currency"],
     price: row.price,
@@ -118,7 +143,12 @@ export function serializeListing(
 }
 
 export function buildListingWhere(
-  filters: ListingFilters & { sellerId?: string; status?: string; includeAllStatuses?: boolean }
+  filters: ListingFilters & {
+    sellerId?: string;
+    storeId?: string;
+    status?: string;
+    includeAllStatuses?: boolean;
+  }
 ): Prisma.ListingWhereInput {
   const where: Prisma.ListingWhereInput = {};
 
@@ -131,12 +161,24 @@ export function buildListingWhere(
   if (filters.sellerId) {
     where.sellerId = filters.sellerId;
   }
+  if (filters.storeId) {
+    where.storeId = filters.storeId;
+  }
+  if (filters.storeSlug) {
+    where.store = { slug: filters.storeSlug };
+  }
+  if (filters.sellerType === "official") {
+    where.storeId = { not: null };
+  } else if (filters.sellerType === "individual") {
+    where.storeId = null;
+  }
 
   if (filters.q && filters.q.trim()) {
     const q = filters.q.trim();
     where.OR = [
       { title: { contains: q, mode: "insensitive" } },
       { description: { contains: q, mode: "insensitive" } },
+      { sku: { contains: q, mode: "insensitive" } },
       { vehicleBrand: { contains: q, mode: "insensitive" } },
       { vehicleModel: { contains: q, mode: "insensitive" } },
       { apparelBrand: { contains: q, mode: "insensitive" } },

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowDownRight,
+  BadgeCheck,
   CalendarClock,
   Car,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   MapPin,
   Maximize2,
   MessageCircle,
+  Package,
   Pencil,
   Phone,
   RefreshCw,
@@ -24,7 +26,9 @@ import {
   Share2,
   ShieldAlert,
   Shirt,
+  ShoppingBag,
   Star,
+  Store,
   Tag,
   Trash2,
   Truck,
@@ -60,6 +64,8 @@ export function ListingDetailView({
     openProfile,
     openPublish,
     openAuth,
+    openCommercialStore,
+    addToStoreCart,
     refreshListings,
     notifyToast,
   } = useApp();
@@ -603,6 +609,46 @@ export function ListingDetailView({
 
         {/* Right Column: Price + Savings vs New + Delivery + Contact + Seller */}
         <div className="space-y-4 md:col-span-5">
+          {/* Official Commercial Store Banner */}
+          {listing.store && (
+            <button
+              type="button"
+              onClick={() => openCommercialStore(listing.store!.slug, listing.store!.name)}
+              style={{
+                borderColor: `${listing.store.neonColor}55`,
+                background: `linear-gradient(135deg, ${listing.store.neonColor}16, #ffffff 65%)`,
+              }}
+              className="flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left shadow-xs transition hover:shadow-md"
+            >
+              {listing.store.logoUrl ? (
+                <img
+                  src={listing.store.logoUrl}
+                  alt={listing.store.name}
+                  className="h-11 w-11 shrink-0 rounded-xl border border-slate-200 bg-slate-900 object-contain p-1"
+                />
+              ) : (
+                <div
+                  style={{ backgroundColor: listing.store.neonColor }}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-xs"
+                >
+                  <Store className="h-5 w-5" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="truncate text-sm font-extrabold text-slate-900">
+                    {listing.store.name}
+                  </span>
+                  <BadgeCheck className="h-4 w-4 shrink-0 text-fuchsia-600" />
+                </div>
+                <p className="text-[11px] font-medium text-slate-600">
+                  Tienda Oficial en Avenida de Marcas 3D · Ver catálogo completo
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+            </button>
+          )}
+
           {/* Price & Deal Card */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
             <div className="flex items-start justify-between gap-2">
@@ -613,6 +659,17 @@ export function ListingDetailView({
                 {listing.subcategory && (
                   <span className="rounded-md bg-slate-100 px-2 py-0.5 text-slate-600">
                     {listing.subcategory.name}
+                  </span>
+                )}
+                {(listing.condition === "BRAND_NEW" || listing.condition === "OUTLET") && (
+                  <span
+                    className={`rounded-md px-2 py-0.5 font-bold ${
+                      listing.condition === "BRAND_NEW"
+                        ? "bg-cyan-100 text-cyan-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {CONDITION_LABELS[listing.condition]}
                   </span>
                 )}
                 {listing.status !== "ACTIVE" && (
@@ -654,8 +711,27 @@ export function ListingDetailView({
               )}
             </div>
 
-            {/* Flexible Deal Flags */}
+            {/* Flexible Deal & Official Catalog Metadata Flags */}
             <div className="mt-3 flex flex-wrap gap-1.5">
+              {listing.sku && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">
+                  SKU: {listing.sku}
+                </span>
+              )}
+              {listing.stockQuantity != null && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                    listing.stockQuantity > 0
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-rose-50 text-rose-700"
+                  }`}
+                >
+                  <Package className="h-3 w-3" />
+                  {listing.stockQuantity > 0
+                    ? `Stock disponible: ${listing.stockQuantity} u.`
+                    : "Sin stock"}
+                </span>
+              )}
               {listing.isNegotiable && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-[#0067c0]">
                   <Tag className="h-3 w-3" /> Precio negociable
@@ -673,7 +749,9 @@ export function ListingDetailView({
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/75 p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold text-emerald-900">
-                    Comparativa vs. producto nuevo
+                    {listing.condition === "BRAND_NEW" || listing.condition === "OUTLET"
+                      ? "Descuento sobre precio de lista"
+                      : "Comparativa vs. producto nuevo"}
                   </span>
                   {listing.savingsPercent && (
                     <span className="shrink-0 whitespace-nowrap rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-extrabold text-white shadow-xs">
@@ -685,14 +763,18 @@ export function ListingDetailView({
                 {listing.referenceNewPrice && (
                   <div className="mt-2 space-y-1.5">
                     <div className="flex justify-between text-xs">
-                      <span className="text-emerald-800">Precio nuevo de referencia:</span>
+                      <span className="text-emerald-800">
+                        {listing.condition === "BRAND_NEW" || listing.condition === "OUTLET"
+                          ? "Precio lista anterior:"
+                          : "Precio nuevo de referencia:"}
+                      </span>
                       <span className="font-bold text-emerald-950 line-through">
                         {formatPrice(listing.referenceNewPrice, listing.currency)}
                       </span>
                     </div>
                     {savingsAmount && (
                       <div className="flex justify-between text-xs">
-                        <span className="text-emerald-800">Te ahorrás comprando usado:</span>
+                        <span className="text-emerald-800">Ahorro directo:</span>
                         <span className="font-extrabold text-emerald-700">
                           {formatPrice(savingsAmount, listing.currency)}
                         </span>
@@ -717,7 +799,7 @@ export function ListingDetailView({
                     className="mt-2.5 flex items-center justify-between rounded-lg border border-emerald-300/80 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-50"
                   >
                     <span className="truncate">
-                      Ver producto nuevo en {refDomain || "tienda externa"}
+                      Ver referencia en {refDomain || "tienda externa"}
                     </span>
                     <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                   </a>
@@ -729,34 +811,50 @@ export function ListingDetailView({
             )}
 
             {/* Contact CTA Buttons */}
-            {!isOwner && (
-              <div className="mt-4 space-y-2">
+            <div className="mt-4 space-y-2">
+              {listing.store && (
                 <button
                   type="button"
-                  onClick={() => startChatForListing(listing.id)}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0067c0] py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-[#0058a6]"
+                  onClick={() => {
+                    addToStoreCart(listing.store!.id, listing);
+                    openCommercialStore(listing.store!.slug, listing.store!.name);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-600 py-2.5 text-sm font-extrabold text-white shadow-xs transition hover:brightness-110"
                 >
-                  <MessageCircle className="h-4 w-4" />
-                  Chatear con {listing.seller.name.split(" ")[0]}
+                  <ShoppingBag className="h-4 w-4" />
+                  + Sumar al pedido de {listing.store.name}
                 </button>
+              )}
 
-                {listing.showWhatsapp && listing.seller.whatsappPhone && (
-                  <a
-                    href={buildWhatsappUrl(
-                      listing.seller.whatsappPhone,
-                      listing.title,
-                      shareUrl
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-600 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
+              {!isOwner && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => startChatForListing(listing.id)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0067c0] py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-[#0058a6]"
                   >
-                    <Phone className="h-4 w-4" />
-                    Consultar por WhatsApp
-                  </a>
-                )}
-              </div>
-            )}
+                    <MessageCircle className="h-4 w-4" />
+                    Chatear con {listing.store ? listing.store.name : listing.seller.name.split(" ")[0]}
+                  </button>
+
+                  {listing.showWhatsapp && listing.seller.whatsappPhone && (
+                    <a
+                      href={buildWhatsappUrl(
+                        listing.seller.whatsappPhone,
+                        listing.title,
+                        shareUrl
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-600 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
+                    >
+                      <Phone className="h-4 w-4" />
+                      Consultar por WhatsApp
+                    </a>
+                  )}
+                </>
+              )}
+            </div>
 
             {/* Share Listing Row */}
             <div className="mt-3.5 flex items-center gap-2 border-t border-slate-100 pt-3">
@@ -879,7 +977,7 @@ export function ListingDetailView({
                         : "Nuevo vendedor"}
                     </span>
                     <span>·</span>
-                    <span>Particular</span>
+                    <span>{listing.store ? "Tienda Oficial" : "Particular"}</span>
                   </div>
                 </div>
               </button>

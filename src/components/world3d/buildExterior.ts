@@ -1,7 +1,10 @@
 import * as THREE from "three";
 import { STORE_THEMES, type StoreTheme } from "@/components/world3d/vicePalette";
 import {
+  createAvailableLotSignTexture,
+  createAvenidaMarcasArchTexture,
   createBoulevardRoadPBR,
+  createCommercialSignTexture,
   createDealBillboardTexture,
   createNeonSignTexture,
   createPalmFrondTexture,
@@ -12,7 +15,7 @@ import {
 import { createRealisticOcean, type OceanShaderHandle } from "@/components/world3d/oceanShader";
 import { buildSculptedHuman, type HumanRig } from "@/components/world3d/buildPlayer";
 import { TIME_PRESETS, type TimeOfDay } from "@/components/world3d/environment";
-import type { ListingDTO } from "@/types/marketplace";
+import type { CommercialStoreDTO, ListingDTO } from "@/types/marketplace";
 
 export interface AABB {
   minX: number;
@@ -23,6 +26,26 @@ export interface AABB {
 
 export interface ExteriorDoorTrigger {
   theme: StoreTheme;
+  x: number;
+  z: number;
+  ring: THREE.Mesh;
+  beam: THREE.Mesh;
+}
+
+export interface CommercialDoorTrigger {
+  store: CommercialStoreDTO;
+  side: "west" | "east";
+  x: number;
+  z: number;
+  spawnExitX: number;
+  spawnExitZ: number;
+  ring: THREE.Mesh;
+  beam: THREE.Mesh;
+}
+
+export interface VacantLotTrigger {
+  id: string;
+  label: string;
   x: number;
   z: number;
   ring: THREE.Mesh;
@@ -68,6 +91,8 @@ export interface ExteriorWorldHandle {
   bounds: AABB;
   pierBounds: AABB;
   doorTriggers: ExteriorDoorTrigger[];
+  commercialDoorTriggers: CommercialDoorTrigger[];
+  vacantLotTriggers: VacantLotTrigger[];
   cars: DrivableCar[];
   clickableMeshes: THREE.Object3D[];
   applyTimeOfDay: (mode: TimeOfDay, skyTexture: THREE.Texture) => void;
@@ -414,15 +439,28 @@ function createBeachUmbrella(colorA: number, colorB: number): THREE.Group {
 export function buildViceExterior(
   listingCountByCategory: Record<string, number>,
   topDealListing?: ListingDTO | null,
-  initialSkyTexture?: THREE.Texture
+  initialSkyTexture?: THREE.Texture,
+  commercialStores: CommercialStoreDTO[] = [],
+  listingCountByStore: Record<string, number> = {}
 ): ExteriorWorldHandle {
   const group = new THREE.Group();
   const colliders: AABB[] = [];
   const doorTriggers: ExteriorDoorTrigger[] = [];
+  const commercialDoorTriggers: CommercialDoorTrigger[] = [];
+  const vacantLotTriggers: VacantLotTrigger[] = [];
   const clickableMeshes: THREE.Object3D[] = [];
   const palmTrees: THREE.Group[] = [];
   const lampGlowPools: THREE.Mesh[] = [];
   const exhaustPuffs: ExhaustPuff[] = [];
+
+  // Dynamic Avenida de Marcas southern boulevard sizing (grows automatically as you sell more stores!)
+  const totalCommercialSlots = commercialStores.length + 2; // always +2 "LOCAL DISPONIBLE" lots
+  const commercialRows = Math.max(1, Math.ceil(totalCommercialSlots / 2));
+  const lastCommercialZ = 52 + (commercialRows - 1) * 20;
+  const northEndZ = -70;
+  const southEndZ = lastCommercialZ + 18;
+  const roadLength = southEndZ - northEndZ;
+  const roadCenterZ = (northEndZ + southEndZ) / 2;
 
   // 1. Sky Dome + Sunset Sun/Moon Disc
   const skyMat = new THREE.MeshBasicMaterial({
@@ -431,18 +469,18 @@ export function buildViceExterior(
     side: THREE.BackSide,
     fog: false,
   });
-  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(285, 28, 18), skyMat);
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(340, 28, 18), skyMat);
   group.add(skyDome);
 
   const sunGroup = new THREE.Group();
   sunGroup.position.set(0, 34, -198);
-  const sunDiscMat = new THREE.MeshBasicMaterial({ color: 0xffa94d, fog: false });
+  const sunDiscMat = new THREE.MeshBasicMaterial({ color: 0xffb454, fog: false });
   const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(28, 36), sunDiscMat);
   sunGroup.add(sunDisc);
   const sunHaloMat = new THREE.MeshBasicMaterial({
     color: 0xff3b9a,
     transparent: true,
-    opacity: 0.34,
+    opacity: 0.32,
     fog: false,
     blending: THREE.AdditiveBlending,
   });
@@ -453,32 +491,39 @@ export function buildViceExterior(
 
   // 2. Ground, PBR Semi-Wet Boulevard Asphalt, Crosswalks, Sidewalks, Sand & GLSL Ocean
   const baseGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(360, 220),
+    new THREE.PlaneGeometry(380, roadLength + 140),
     new THREE.MeshStandardMaterial({ color: 0x312340, roughness: 0.92 })
   );
   baseGround.rotation.x = -Math.PI / 2;
-  baseGround.position.set(0, -0.05, 10);
+  baseGround.position.set(0, -0.05, roadCenterZ + 10);
   baseGround.receiveShadow = true;
   group.add(baseGround);
 
   const roadPBR = createBoulevardRoadPBR();
+  roadPBR.map.repeat.set(1, Math.round(roadLength / 10));
+  roadPBR.bumpMap.repeat.set(1, Math.round(roadLength / 10));
+  roadPBR.roughnessMap.repeat.set(1, Math.round(roadLength / 10));
   const roadMat = new THREE.MeshStandardMaterial({
     map: roadPBR.map,
     bumpMap: roadPBR.bumpMap,
     bumpScale: 0.04,
     roughnessMap: roadPBR.roughnessMap,
-    roughness: 0.42,
-    metalness: 0.28,
+    roughness: 0.64,
+    metalness: 0.1,
   });
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(12.4, 128), roadMat);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(12.4, roadLength), roadMat);
   road.rotation.x = -Math.PI / 2;
-  road.position.set(0, 0.01, -6);
+  road.position.set(0, 0.01, roadCenterZ);
   road.receiveShadow = true;
   group.add(road);
 
-  // Zebra Pedestrian Crosswalks along Ocean Boulevard!
+  // Zebra Pedestrian Crosswalks along Ocean Boulevard & Avenida de Marcas!
   const zebraMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 });
-  for (const cz of [41, 22, 2, -18, -38, -57]) {
+  const crosswalkZs: number[] = [-57, -38, -18, 2, 22, 42];
+  for (let cz = 62; cz <= southEndZ - 8; cz += 20) {
+    crosswalkZs.push(cz);
+  }
+  for (const cz of crosswalkZs) {
     for (let sx = -4.8; sx <= 4.8; sx += 1.6) {
       const stripe = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 2.6), zebraMat);
       stripe.rotation.x = -Math.PI / 2;
@@ -488,18 +533,19 @@ export function buildViceExterior(
   }
 
   const sidewalkTex = createSidewalkTexture();
+  sidewalkTex.repeat.set(2, Math.round(roadLength / 3.8));
   const sidewalkMat = new THREE.MeshStandardMaterial({
     map: sidewalkTex,
     roughness: 0.65,
   });
 
-  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 128), sidewalkMat);
-  westWalk.position.set(-9.4, 0.08, -6);
+  const westWalk = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, roadLength), sidewalkMat);
+  westWalk.position.set(-9.4, 0.08, roadCenterZ);
   westWalk.receiveShadow = true;
   group.add(westWalk);
 
-  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 128), sidewalkMat);
-  eastWalk.position.set(9.4, 0.08, -6);
+  const eastWalk = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, roadLength), sidewalkMat);
+  eastWalk.position.set(9.4, 0.08, roadCenterZ);
   eastWalk.receiveShadow = true;
   group.add(eastWalk);
 
@@ -509,12 +555,49 @@ export function buildViceExterior(
     emissiveIntensity: 0.55,
     roughness: 0.3,
   });
-  const westCurb = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 128), curbMat);
-  westCurb.position.set(-6.2, 0.09, -6);
+  const westCurb = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, roadLength), curbMat);
+  westCurb.position.set(-6.2, 0.09, roadCenterZ);
   group.add(westCurb);
   const eastCurb = westCurb.clone();
   eastCurb.position.x = 6.2;
   group.add(eastCurb);
+
+  // Glowing Neon Overhead Archway marking AVENIDA DE MARCAS (z = 42)
+  const archGroup = new THREE.Group();
+  archGroup.position.set(0, 0, 42);
+  const archPillarMat = new THREE.MeshStandardMaterial({
+    color: 0x16102c,
+    metalness: 0.75,
+    roughness: 0.25,
+  });
+  const archGoldMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+  for (const ax of [-12.2, 12.2]) {
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 8.6, 10), archPillarMat);
+    pillar.position.set(ax, 4.3, 0);
+    archGroup.add(pillar);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 8, 16), archGoldMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(ax, 7.6, 0);
+    archGroup.add(ring);
+  }
+  const archTex = createAvenidaMarcasArchTexture();
+  const archFrame = new THREE.Mesh(new THREE.BoxGeometry(24.8, 2.35, 0.38), archPillarMat);
+  archFrame.position.set(0, 8.2, 0);
+  archGroup.add(archFrame);
+  const archFront = new THREE.Mesh(
+    new THREE.PlaneGeometry(24.0, 2.05),
+    new THREE.MeshBasicMaterial({ map: archTex })
+  );
+  archFront.position.set(0, 8.2, 0.21);
+  archGroup.add(archFront);
+  const archBack = new THREE.Mesh(
+    new THREE.PlaneGeometry(24.0, 2.05),
+    new THREE.MeshBasicMaterial({ map: archTex })
+  );
+  archBack.position.set(0, 8.2, -0.21);
+  archBack.rotation.y = Math.PI;
+  archGroup.add(archBack);
+  group.add(archGroup);
 
   // Beach Promenade, Golden Sand & Custom GLSL Ocean Wave Shader!
   const boardwalk = new THREE.Mesh(
@@ -617,8 +700,6 @@ export function buildViceExterior(
   });
 
   const palmPositions: [number, number][] = [
-    [-7.1, 44],
-    [7.1, 44],
     [-7.1, 22],
     [7.1, 22],
     [-7.1, 2],
@@ -634,6 +715,9 @@ export function buildViceExterior(
     [11, -75],
     [22, -74],
   ];
+  for (let pz = 62; pz <= southEndZ - 6; pz += 20) {
+    palmPositions.push([-7.1, pz], [7.1, pz]);
+  }
   palmPositions.forEach(([px, pz], idx) => {
     const palm = createRealisticPalmTree(idx + 1.3, palmFrondGeo, palmFrondMat);
     palm.position.set(px, 0.16, pz);
@@ -651,7 +735,8 @@ export function buildViceExterior(
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  for (let lz = 40; lz >= -56; lz -= 20) {
+  for (let lz = southEndZ - 10; lz >= -56; lz -= 20) {
+    if (Math.abs(lz - 42) < 3) continue; // Keep archway clean
     for (const lx of [-6.7, 6.7]) {
       const lamp = new THREE.Group();
       lamp.position.set(lx, 0.16, lz);
@@ -677,7 +762,10 @@ export function buildViceExterior(
   const hydrantMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35, metalness: 0.3 });
   const alleyWallMat = new THREE.MeshStandardMaterial({ color: 0x3b2358, roughness: 0.8 });
 
-  const gapZs = [22, 2, -18, -38];
+  const gapZs: number[] = [42, 22, 2, -18, -38];
+  for (let gz = 62; gz <= lastCommercialZ - 8; gz += 20) {
+    gapZs.push(gz);
+  }
   const cafeColors = [0xff2a9d, 0x00e5ff, 0xffb703, 0x34d399];
   gapZs.forEach((gz, gi) => {
     for (const side of [-1, 1]) {
@@ -700,7 +788,7 @@ export function buildViceExterior(
       group.add(cafe);
 
       // Red fire hydrant near curb every other block
-      if (gi % 2 === 0) {
+      if (gi % 2 === 0 && gz !== 42) {
         const hyd = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.62, 8), hydrantMat);
         hyd.position.set(side * 6.8, 0.45, gz + 3.2);
         group.add(hyd);
@@ -874,9 +962,233 @@ export function buildViceExterior(
     doorTriggers.push({ theme, x: theme.doorX, z: theme.doorZ, ring, beam });
   });
 
+  // 4B. AVENIDA DE MARCAS: Dynamic Real Commercial Storefronts + 2 Vacant "LOCAL DISPONIBLE" Lots!
+  const buildingW = 10.6;
+  const buildingD = 14.4;
+  const windowGlassMat = new THREE.MeshPhysicalMaterial({
+    color: 0x0f172a,
+    roughness: 0.08,
+    metalness: 0.15,
+    clearcoat: 1.0,
+    transparent: true,
+    opacity: 0.72,
+  });
+
+  const buildCommercialBuilding = (opts: {
+    slotIndex: number;
+    facadeColor: string;
+    neonColor: string;
+    secondaryNeon: string;
+    isFlagship?: boolean;
+    signTexture: THREE.Texture;
+    userData: Record<string, unknown>;
+  }) => {
+    const side: "west" | "east" = opts.slotIndex % 2 === 0 ? "west" : "east";
+    const row = Math.floor(opts.slotIndex / 2);
+    const bx = side === "west" ? -17.5 : 17.5;
+    const bz = 52 + row * 20;
+    const doorX = side === "west" ? -10.8 : 10.8;
+    const spawnExitX = side === "west" ? -8.5 : 8.5;
+    const faceDir = side === "west" ? 1 : -1;
+    const bh = opts.isFlagship ? 9.4 : 8.4;
+
+    const storeGroup = new THREE.Group();
+    storeGroup.position.set(bx, 0, bz);
+
+    const facadeMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(opts.facadeColor),
+      bumpMap: stuccoBump,
+      bumpScale: 0.03,
+      roughness: 0.62,
+      metalness: 0.06,
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(buildingW, bh, buildingD), facadeMat);
+    body.position.y = bh / 2;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    body.userData = opts.userData;
+    storeGroup.add(body);
+    clickableMeshes.push(body);
+
+    // Art-Deco Parapet Crown (gold crown for Flagship VIP!)
+    const crownColor = opts.isFlagship ? 0xfbbf24 : new THREE.Color(opts.neonColor).getHex();
+    const crown = new THREE.Mesh(
+      new THREE.BoxGeometry(buildingW + 0.5, 0.55, buildingD + 0.5),
+      new THREE.MeshStandardMaterial({
+        color: crownColor,
+        roughness: 0.35,
+        metalness: opts.isFlagship ? 0.65 : 0.2,
+      })
+    );
+    crown.position.y = bh + 0.28;
+    storeGroup.add(crown);
+
+    const neonBarMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(opts.neonColor) });
+    const secBarMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(opts.secondaryNeon) });
+
+    // Glowing roof neon & vertical pilasters
+    const roofNeon = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, buildingD + 0.4), neonBarMat);
+    roofNeon.position.set(faceDir * (buildingW / 2 + 0.14), bh + 0.05, 0);
+    storeGroup.add(roofNeon);
+
+    for (const pz of [-buildingD / 2 + 0.5, buildingD / 2 - 0.5]) {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.24, bh, 0.24), secBarMat);
+      strip.position.set(faceDir * (buildingW / 2 + 0.12), bh / 2, pz);
+      storeGroup.add(strip);
+    }
+
+    // Translucent display windows + glowing warm showroom backdrop
+    const warmInteriorMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(opts.neonColor),
+      transparent: true,
+      opacity: 0.24,
+    });
+    for (const wz of [-4.2, 4.2]) {
+      const winBack = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.5), warmInteriorMat);
+      winBack.position.set(faceDir * (buildingW / 2 + 0.04), 2.1, wz);
+      winBack.rotation.y = side === "west" ? Math.PI / 2 : -Math.PI / 2;
+      storeGroup.add(winBack);
+
+      const winGlass = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 3.6), windowGlassMat);
+      winGlass.position.set(faceDir * (buildingW / 2 + 0.08), 2.1, wz);
+      winGlass.userData = opts.userData;
+      storeGroup.add(winGlass);
+      clickableMeshes.push(winGlass);
+    }
+
+    // Designer Entrance Canopy
+    const canopy = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 0.22, 4.6),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(opts.neonColor),
+        roughness: 0.35,
+        metalness: 0.2,
+      })
+    );
+    canopy.position.set(faceDir * (buildingW / 2 + 1.25), 3.65, 0);
+    canopy.castShadow = true;
+    storeGroup.add(canopy);
+
+    // Translucent Glass Doorway
+    const door = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 3.2, 2.5),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(opts.neonColor),
+        transparent: true,
+        opacity: 0.42,
+      })
+    );
+    door.position.set(faceDir * (buildingW / 2 + 0.08), 1.6, 0);
+    door.userData = opts.userData;
+    storeGroup.add(door);
+    clickableMeshes.push(door);
+
+    // Giant Illuminated Real-Logo Commercial Marquee
+    const signBacking = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 3.7, 11.4),
+      new THREE.MeshStandardMaterial({ color: 0x0b071d, roughness: 0.3 })
+    );
+    signBacking.position.set(faceDir * (buildingW / 2 + 0.14), 6.05, 0);
+    storeGroup.add(signBacking);
+
+    const signMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(11.1, 3.45),
+      new THREE.MeshBasicMaterial({ map: opts.signTexture })
+    );
+    signMesh.position.set(faceDir * (buildingW / 2 + 0.28), 6.05, 0);
+    signMesh.rotation.y = side === "west" ? Math.PI / 2 : -Math.PI / 2;
+    signMesh.userData = opts.userData;
+    storeGroup.add(signMesh);
+    clickableMeshes.push(signMesh);
+
+    group.add(storeGroup);
+
+    colliders.push({
+      minX: bx - buildingW / 2 - 0.55,
+      maxX: bx + buildingW / 2 + 0.55,
+      minZ: bz - buildingD / 2 - 0.45,
+      maxZ: bz + buildingD / 2 + 0.45,
+    });
+
+    const markerColor = new THREE.Color(opts.neonColor);
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.98, 0.12, 10, 28),
+      new THREE.MeshBasicMaterial({ color: markerColor })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(doorX, 0.28, bz);
+    ring.userData = opts.userData;
+    group.add(ring);
+    clickableMeshes.push(ring);
+
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1.02, 2.5, 20, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: markerColor,
+        transparent: true,
+        opacity: 0.24,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    beam.position.set(doorX, 1.4, bz);
+    group.add(beam);
+
+    return { side, doorX, bz, spawnExitX, ring, beam };
+  };
+
+  // Render every active Commercial Store with its real logo & custom branding!
+  commercialStores.forEach((store, idx) => {
+    const liveCount = listingCountByStore[store.id] ?? store.activeListingsCount ?? 0;
+    const signTexture = createCommercialSignTexture(store, liveCount);
+    const built = buildCommercialBuilding({
+      slotIndex: idx,
+      facadeColor: store.facadeColor || "#ecfeff",
+      neonColor: store.neonColor || "#00f0ff",
+      secondaryNeon: store.secondaryNeon || "#ff2a9d",
+      isFlagship: store.planTier === "FLAGSHIP",
+      signTexture,
+      userData: { type: "commercial_store", storeSlug: store.slug },
+    });
+    commercialDoorTriggers.push({
+      store,
+      side: built.side,
+      x: built.doorX,
+      z: built.bz,
+      spawnExitX: built.spawnExitX,
+      spawnExitZ: built.bz,
+      ring: built.ring,
+      beam: built.beam,
+    });
+  });
+
+  // Always render 2 glowing "LOCAL DISPONIBLE — TU MARCA AQUÍ" storefronts at the south end!
+  for (let v = 0; v < 2; v++) {
+    const lotNum = commercialStores.length + v + 1;
+    const label = `Local Disponible #${lotNum}`;
+    const signTexture = createAvailableLotSignTexture(label);
+    const built = buildCommercialBuilding({
+      slotIndex: commercialStores.length + v,
+      facadeColor: "#fef3c7",
+      neonColor: "#fbbf24",
+      secondaryNeon: "#ff2a9d",
+      isFlagship: false,
+      signTexture,
+      userData: { type: "rent_store", lotLabel: label },
+    });
+    vacantLotTriggers.push({
+      id: `vacant-${lotNum}`,
+      label,
+      x: built.doorX,
+      z: built.bz,
+      ring: built.ring,
+      beam: built.beam,
+    });
+  }
+
   // 5. Distant Vice City Skyline Silhouettes
   const skylineColors = [0x2a1b4e, 0x3b2260, 0x4b2669, 0x261a44];
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 20; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const h = 18 + ((i * 11) % 28);
     const w = 8 + ((i * 5) % 8);
@@ -887,16 +1199,16 @@ export function buildViceExterior(
         roughness: 0.85,
       })
     );
-    tower.position.set(side * (36 + (i % 3) * 9), h / 2, 42 - i * 7.5);
+    tower.position.set(side * (36 + (i % 3) * 9), h / 2, southEndZ - 12 - i * 8.5);
     group.add(tower);
   }
 
   // 6. Four Sculpted DRIVABLE 80s Supercars with Clearcoat Paint, Brake Lights & Exhaust Smoke!
   const carSpecs = [
-    { id: "infernus", name: "Infernus Rosa 86", color: 0xff2a9d, laneX: 2.9, startZ: 28, aiDir: -1, aiSpeed: 8.5 },
-    { id: "cheetah", name: "Cheetah Cian 84", color: 0x00e5ff, laneX: 2.9, startZ: -26, aiDir: -1, aiSpeed: 8.5 },
-    { id: "banshee", name: "Banshee Blanco 88", color: 0xf8fafc, laneX: -2.9, startZ: -40, aiDir: 1, aiSpeed: 8.0 },
-    { id: "stinger", name: "Stinger Dorado 85", color: 0xfbbf24, laneX: -2.9, startZ: 18, aiDir: 1, aiSpeed: 8.0 },
+    { id: "infernus", name: "Infernus Rosa 86", color: 0xff2a9d, laneX: 2.9, startZ: 48, aiDir: -1, aiSpeed: 8.5 },
+    { id: "cheetah", name: "Cheetah Cian 84", color: 0x00e5ff, laneX: 2.9, startZ: -18, aiDir: -1, aiSpeed: 8.5 },
+    { id: "banshee", name: "Banshee Blanco 88", color: 0xf8fafc, laneX: -2.9, startZ: -38, aiDir: 1, aiSpeed: 8.0 },
+    { id: "stinger", name: "Stinger Dorado 85", color: 0xfbbf24, laneX: -2.9, startZ: 34, aiDir: 1, aiSpeed: 8.0 },
   ];
 
   const cars: DrivableCar[] = carSpecs.map((spec) => {
@@ -937,7 +1249,7 @@ export function buildViceExterior(
   });
   let lastPuffTime = 0;
 
-  // 7. 10 Sculpted Pedestrians strolling sidewalks & boardwalk
+  // 7. Sculpted Pedestrians strolling sidewalks, Avenida de Marcas & boardwalk
   const pedPalette: [number, number, number][] = [
     [0xff5ec4, 0xf8fafc, 0xe8ba95],
     [0x2dd4bf, 0x1e293b, 0xd89f74],
@@ -947,7 +1259,7 @@ export function buildViceExterior(
   ];
   const pedestrians: PedestrianNPC[] = [];
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const [sh, pa, sk] = pedPalette[i % pedPalette.length];
     const rig = buildSculptedHuman({
@@ -962,7 +1274,7 @@ export function buildViceExterior(
       rig,
       axis: "z",
       min: -60,
-      max: 44,
+      max: southEndZ - 8,
       dir: i % 3 === 0 ? -1 : 1,
       speed: 1.8 + (i % 3) * 0.45,
     });
@@ -987,8 +1299,9 @@ export function buildViceExterior(
     });
   }
 
-  const bounds: AABB = { minX: -12.4, maxX: 12.4, minZ: -74, maxZ: 49 };
+  const bounds: AABB = { minX: -12.4, maxX: 12.4, minZ: -74, maxZ: southEndZ - 5 };
   const pierBounds: AABB = { minX: -3.7, maxX: 3.7, minZ: -110, maxZ: -72 };
+  const carWrapSouthZ = southEndZ - 6;
 
   return {
     group,
@@ -996,6 +1309,8 @@ export function buildViceExterior(
     bounds,
     pierBounds,
     doorTriggers,
+    commercialDoorTriggers,
+    vacantLotTriggers,
     cars,
     clickableMeshes,
     applyTimeOfDay(mode: TimeOfDay, skyTexture: THREE.Texture) {
@@ -1045,6 +1360,20 @@ export function buildViceExterior(
         (trg.beam.material as THREE.MeshBasicMaterial).opacity =
           0.16 + Math.sin(time * 3 + i) * 0.08;
       }
+      for (let i = 0; i < commercialDoorTriggers.length; i++) {
+        const trg = commercialDoorTriggers[i];
+        trg.ring.position.y = 0.28 + Math.sin(time * 3.4 + i) * 0.07;
+        trg.ring.rotation.z = -time * 1.6;
+        (trg.beam.material as THREE.MeshBasicMaterial).opacity =
+          0.18 + Math.sin(time * 3.2 + i) * 0.09;
+      }
+      for (let i = 0; i < vacantLotTriggers.length; i++) {
+        const trg = vacantLotTriggers[i];
+        trg.ring.position.y = 0.28 + Math.cos(time * 3.0 + i) * 0.07;
+        trg.ring.rotation.z = time * 1.2;
+        (trg.beam.material as THREE.MeshBasicMaterial).opacity =
+          0.16 + Math.cos(time * 2.8 + i) * 0.08;
+      }
 
       // Cars AI, wheel rotation, dynamic brake lights & exhaust smoke!
       for (const car of cars) {
@@ -1057,15 +1386,12 @@ export function buildViceExterior(
           car.headlightMat.color.setHex(0xfffbeb);
         }
 
-        // Dynamic brake lights flare bright neon red when braking or reversing!
         car.brakeLightMat.color.setHex(car.braking ? 0xff1e56 : 0x991b1b);
 
         if (car.id === drivenCarId) {
-          // Spin wheels smoothly by driven speed
           const wheelSpin = car.speed * dt * 2.5;
           for (const w of car.wheels) w.rotation.x += wheelSpin;
 
-          // Spawn subtle exhaust smoke puffs when accelerating hard!
           if (car.speed > 5 && time - lastPuffTime > 0.09) {
             lastPuffTime = time;
             const puff = new THREE.Mesh(puffGeo, puffMatBase.clone());
@@ -1114,8 +1440,8 @@ export function buildViceExterior(
           car.yaw = car.aiDir === -1 ? Math.PI : 0;
           car.mesh.rotation.y = car.yaw;
           for (const w of car.wheels) w.rotation.x += car.aiSpeed * dt * 2.4;
-          if (car.mesh.position.z < -64) car.mesh.position.z = 52;
-          if (car.mesh.position.z > 52) car.mesh.position.z = -64;
+          if (car.mesh.position.z < -64) car.mesh.position.z = carWrapSouthZ;
+          if (car.mesh.position.z > carWrapSouthZ) car.mesh.position.z = -64;
         }
       }
 

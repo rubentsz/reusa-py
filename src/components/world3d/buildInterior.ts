@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { ListingDTO } from "@/types/marketplace";
+import type { CommercialStoreDTO, ListingDTO } from "@/types/marketplace";
 import type { StoreTheme } from "@/components/world3d/vicePalette";
 import type { AABB } from "@/components/world3d/buildExterior";
 import { buildCategoryPropModel } from "@/components/world3d/buildPropModels";
@@ -7,6 +7,8 @@ import { buildSculptedHuman } from "@/components/world3d/buildPlayer";
 import {
   applyImageUrlToMaterial,
   createActionStandTexture,
+  createCommercialSignTexture,
+  createFloorLogoMedallionTexture,
   createMarbleFloorPBR,
   createNeonSignTexture,
   createPriceHologramTexture,
@@ -33,6 +35,7 @@ export interface InteriorWorldHandle {
   bounds: AABB;
   colliders: AABB[];
   spawnPos: THREE.Vector3;
+  isCommercialStore: boolean;
   exitSpot: { x: number; z: number; ring: THREE.Mesh };
   publishSpot: { x: number; z: number; ring: THREE.Mesh };
   npcSpot: { x: number; z: number; ring: THREE.Mesh };
@@ -149,7 +152,8 @@ export function buildStoreInterior(
   theme: StoreTheme,
   categoryName: string,
   listings: ListingDTO[],
-  favoriteIds: Set<string>
+  favoriteIds: Set<string>,
+  commercialStore?: CommercialStoreDTO
 ): InteriorWorldHandle {
   const group = new THREE.Group();
   const colliders: AABB[] = [];
@@ -158,14 +162,14 @@ export function buildStoreInterior(
 
   const count = listings.length;
   const rowsNeeded = Math.max(2, Math.ceil(count / 2));
-  const roomW = 21.5;
+  const roomW = commercialStore?.planTier === "FLAGSHIP" ? 23.0 : 21.5;
   const roomD = Math.max(22, rowsNeeded * 6.8 + 11.5);
   const halfW = roomW / 2;
   const halfD = roomD / 2;
   const wallH = 6.5;
 
-  const neonColor = new THREE.Color(theme.neonColor);
-  const secNeonColor = new THREE.Color(theme.secondaryNeon);
+  const neonColor = new THREE.Color(commercialStore?.neonColor || theme.neonColor);
+  const secNeonColor = new THREE.Color(commercialStore?.secondaryNeon || theme.secondaryNeon);
 
   // Polished Reflective Veined Marble Showroom Floor (uses PMREM envMap!)
   const marblePBR = createMarbleFloorPBR(theme.interiorFloorA, theme.interiorFloorB);
@@ -235,20 +239,50 @@ export function buildStoreInterior(
   aisleStrip.position.y = 0.015;
   group.add(aisleStrip);
 
-  // Back Wall Giant Store Sign
-  const signTex = createNeonSignTexture(
-    theme.viceName,
-    categoryName,
-    theme.neonColor,
-    theme.secondaryNeon,
-    count
-  );
+  // Back Wall Giant Store Sign (Commercial Brand Real Logo OR Category Neon)
+  const signTex = commercialStore
+    ? createCommercialSignTexture(commercialStore, count)
+    : createNeonSignTexture(
+        theme.viceName,
+        categoryName,
+        theme.neonColor,
+        theme.secondaryNeon,
+        count
+      );
   const backSign = new THREE.Mesh(
-    new THREE.PlaneGeometry(11.8, 3.2),
+    new THREE.PlaneGeometry(12.2, 3.6),
     new THREE.MeshBasicMaterial({ map: signTex })
   );
   backSign.position.set(0, 4.15, -halfD + 0.25);
   group.add(backSign);
+
+  // Commercial Brand Extras: Glowing Floor Logo Medallion + Illuminated Side Wall Brand Lightboxes!
+  if (commercialStore) {
+    const medallionTex = createFloorLogoMedallionTexture(commercialStore);
+    const medallion = new THREE.Mesh(
+      new THREE.CircleGeometry(2.35, 36),
+      new THREE.MeshBasicMaterial({
+        map: medallionTex,
+        transparent: true,
+        depthWrite: false,
+      })
+    );
+    medallion.rotation.x = -Math.PI / 2;
+    medallion.position.set(0, 0.025, halfD - 6.6);
+    group.add(medallion);
+
+    const sideBannerGeo = new THREE.PlaneGeometry(6.4, 2.1);
+    const sideBannerMat = new THREE.MeshBasicMaterial({ map: signTex });
+    const leftBanner = new THREE.Mesh(sideBannerGeo, sideBannerMat);
+    leftBanner.position.set(-halfW + 0.26, 4.1, 0);
+    leftBanner.rotation.y = Math.PI / 2;
+    group.add(leftBanner);
+
+    const rightBanner = new THREE.Mesh(sideBannerGeo, sideBannerMat);
+    rightBanner.position.set(halfW - 0.26, 4.1, 0);
+    rightBanner.rotation.y = -Math.PI / 2;
+    group.add(rightBanner);
+  }
 
   // Potted indoor designer plants
   const potMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
@@ -305,7 +339,11 @@ export function buildStoreInterior(
 
   const npcLabel = new THREE.Sprite(
     new THREE.SpriteMaterial({
-      map: createActionStandTexture("Asesor Vice PY", "Clic o [E] · Mejor ganga", theme.secondaryNeon),
+      map: createActionStandTexture(
+        commercialStore ? `Asesor ${commercialStore.name}` : "Asesor Vice PY",
+        commercialStore ? "Horarios · WhatsApp · Info" : "Clic o [E] · Mejor ganga",
+        commercialStore?.secondaryNeon || theme.secondaryNeon
+      ),
       transparent: true,
     })
   );
@@ -545,38 +583,46 @@ export function buildStoreInterior(
     });
   });
 
-  // "+ Publicar en esta tienda" Pedestal
+  // Left Pedestal: "+ Publicar" (Community store) OR "Catálogo / Info / Pedido" (Commercial store)
   const publishX = -6.2;
   const publishZ = counterZ + 2.0;
   const pubGroup = new THREE.Group();
   pubGroup.position.set(publishX, 0, publishZ);
   pubGroup.rotation.y = 0.42;
 
+  const leftActionUserData = commercialStore
+    ? { type: "store_info", storeSlug: commercialStore.slug }
+    : { type: "publish", categorySlug: theme.categorySlug };
+
   const pubBase = new THREE.Mesh(
     new THREE.CylinderGeometry(1.05, 1.2, 0.65, 16),
     new THREE.MeshStandardMaterial({ color: 0x13242b, roughness: 0.3, metalness: 0.4 })
   );
   pubBase.position.y = 0.33;
-  pubBase.userData = { type: "publish", categorySlug: theme.categorySlug };
+  pubBase.userData = leftActionUserData;
   pubGroup.add(pubBase);
   clickableMeshes.push(pubBase);
 
   const pubPanel = new THREE.Mesh(
     new THREE.PlaneGeometry(2.4, 1.5),
     new THREE.MeshBasicMaterial({
-      map: createActionStandTexture(`Vender en ${categoryName}`, "Subí tus fotos gratis", "#10b981"),
+      map: createActionStandTexture(
+        commercialStore ? "Catálogo y Pedido" : `Vender en ${categoryName}`,
+        commercialStore ? "WhatsApp · Mapa · Horarios" : "Subí tus fotos gratis",
+        commercialStore ? commercialStore.neonColor : "#10b981"
+      ),
       side: THREE.DoubleSide,
     })
   );
   pubPanel.position.y = 1.85;
-  pubPanel.userData = { type: "publish", categorySlug: theme.categorySlug };
+  pubPanel.userData = leftActionUserData;
   pubGroup.add(pubPanel);
   clickableMeshes.push(pubPanel);
   group.add(pubGroup);
 
   const publishRing = new THREE.Mesh(
     new THREE.TorusGeometry(0.82, 0.08, 10, 24),
-    new THREE.MeshBasicMaterial({ color: 0x10b981 })
+    new THREE.MeshBasicMaterial({ color: commercialStore ? neonColor : 0x10b981 })
   );
   publishRing.rotation.x = Math.PI / 2;
   publishRing.position.set(publishX + 1.85, 0.14, publishZ);
@@ -654,6 +700,7 @@ export function buildStoreInterior(
     bounds,
     colliders,
     spawnPos: new THREE.Vector3(0, 0, halfD - 3.8),
+    isCommercialStore: Boolean(commercialStore),
     exitSpot: { x: 0, z: exitZ, ring: exitRing },
     publishSpot: { x: publishX + 1.85, z: publishZ, ring: publishRing },
     npcSpot: { x: 0, z: counterZ + 1.85, ring: npcRing },

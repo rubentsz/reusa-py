@@ -76,6 +76,73 @@ export interface ListingImageDTO {
   isCover: boolean;
 }
 
+export interface CommercialStoreSummaryDTO {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string | null;
+  neonColor: string;
+  planTier: "BASIC" | "FEATURED" | "FLAGSHIP";
+  status: "PENDING" | "ACTIVE" | "PAUSED" | "EXPIRED";
+}
+
+export interface CommercialStoreDTO {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string;
+  description: string;
+  ownerId: string;
+  owner?: { id: string; name: string; email: string; whatsappPhone: string | null };
+  categoryId: string | null;
+  category?: { id: string; name: string; slug: string; icon: string } | null;
+  status: "PENDING" | "ACTIVE" | "PAUSED" | "EXPIRED";
+  planTier: "BASIC" | "FEATURED" | "FLAGSHIP";
+  maxProducts: number;
+  monthlyPricePyg: number;
+  expiresAt: string | null;
+  slotOrder: number;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  facadeColor: string;
+  neonColor: string;
+  secondaryNeon: string;
+  npcGreeting: string | null;
+  departmentId: string | null;
+  department?: { id: string; name: string; slug: string } | null;
+  cityId: string | null;
+  city?: { id: string; name: string; slug: string } | null;
+  address: string | null;
+  openingHours: string | null;
+  whatsappPhone: string | null;
+  instagramUrl: string | null;
+  websiteUrl: string | null;
+  approxLat: number | null;
+  approxLng: number | null;
+  visitsCount: number;
+  productClicksCount: number;
+  whatsappClicksCount: number;
+  activeListingsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreInquiryDTO {
+  id: string;
+  businessName: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  rubro: string;
+  cityName: string;
+  desiredPlan: "BASIC" | "FEATURED" | "FLAGSHIP";
+  instagramOrWeb: string | null;
+  notes: string | null;
+  userId: string | null;
+  status: "NEW" | "CONTACTED" | "APPROVED" | "REJECTED";
+  createdAt: string;
+}
+
 export interface ListingDTO {
   id: string;
   slug: string;
@@ -83,12 +150,16 @@ export interface ListingDTO {
   description: string;
   sellerId: string;
   seller: SellerSummaryDTO;
+  storeId?: string | null;
+  store?: CommercialStoreSummaryDTO | null;
   categoryId: string;
   category: { id: string; name: string; slug: string; icon: string; verticalType: VerticalType };
   subcategoryId: string | null;
   subcategory?: { id: string; name: string; slug: string } | null;
   status: ListingStatus;
   condition: string;
+  sku?: string | null;
+  stockQuantity?: number | null;
   isFree: boolean;
   currency: Currency;
   price: number;
@@ -145,6 +216,8 @@ export interface ListingFilters {
   q?: string;
   category?: string;
   subcategory?: string;
+  storeSlug?: string;
+  sellerType?: "" | "official" | "individual";
   department?: string;
   city?: string;
   neighborhood?: string;

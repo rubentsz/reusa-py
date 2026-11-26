@@ -43,7 +43,11 @@ const patchListingSchema = z.object({
   title: z.string().trim().min(4).max(120).optional(),
   description: z.string().trim().min(10).max(4000).optional(),
   status: z.enum(["ACTIVE", "RESERVED", "SOLD", "PAUSED"]).optional(),
-  condition: z.enum(["LIKE_NEW", "VERY_GOOD", "GOOD", "WITH_DETAILS", "FOR_PARTS"]).optional(),
+  condition: z
+    .enum(["BRAND_NEW", "OUTLET", "LIKE_NEW", "VERY_GOOD", "GOOD", "WITH_DETAILS", "FOR_PARTS"])
+    .optional(),
+  sku: z.string().trim().max(48).optional().nullable(),
+  stockQuantity: z.number().int().min(0).max(99999).optional().nullable(),
   isFree: z.boolean().optional(),
   currency: z.enum(["PYG", "USD"]).optional(),
   price: z.number().min(0).optional(),
@@ -74,11 +78,13 @@ export async function PATCH(
     const { id } = await context.params;
     const existing = await prisma.listing.findFirst({
       where: { OR: [{ id }, { slug: id }] },
+      include: { store: { select: { ownerId: true } } },
     });
     if (!existing) {
       return NextResponse.json({ error: "Publicación no encontrada" }, { status: 404 });
     }
-    if (existing.sellerId !== currentUser.id && currentUser.role !== "ADMIN") {
+    const isStoreOwner = existing.store?.ownerId === currentUser.id;
+    if (existing.sellerId !== currentUser.id && !isStoreOwner && currentUser.role !== "ADMIN") {
       return NextResponse.json({ error: "Sin permisos para editar este aviso" }, { status: 403 });
     }
 
@@ -108,6 +114,8 @@ export async function PATCH(
         ...(d.description !== undefined ? { description: d.description } : {}),
         ...(d.status !== undefined ? { status: d.status } : {}),
         ...(d.condition !== undefined ? { condition: d.condition } : {}),
+        ...(d.sku !== undefined ? { sku: d.sku } : {}),
+        ...(d.stockQuantity !== undefined ? { stockQuantity: d.stockQuantity } : {}),
         isFree: nextIsFree,
         currency: nextCurrency,
         price: nextPrice,

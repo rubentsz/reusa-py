@@ -55,6 +55,48 @@ export function buildWhatsappUrl(phone: string, listingTitle: string, listingUrl
   return `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
 }
 
+export function buildStoreCartWhatsappUrl(
+  phone: string,
+  storeName: string,
+  items: { title: string; qty: number; price: number; currency: string; isFree?: boolean; sku?: string | null }[],
+  storeUrl?: string
+): string {
+  const digits = phone.replace(/\D/g, "");
+  const normalized = digits.startsWith("595")
+    ? digits
+    : digits.startsWith("0")
+    ? `595${digits.slice(1)}`
+    : `595${digits}`;
+
+  const lines = items.map(
+    (it) =>
+      `• ${it.qty}x ${it.title}${it.sku ? ` [SKU: ${it.sku}]` : ""} — ${formatPrice(
+        it.price * it.qty,
+        it.currency,
+        it.isFree
+      )}`
+  );
+
+  const totalPyg = items
+    .filter((i) => !i.isFree && i.currency === "PYG")
+    .reduce((acc, i) => acc + i.price * i.qty, 0);
+  const totalUsd = items
+    .filter((i) => !i.isFree && i.currency === "USD")
+    .reduce((acc, i) => acc + i.price * i.qty, 0);
+
+  const totals: string[] = [];
+  if (totalPyg > 0) totals.push(formatPrice(totalPyg, "PYG"));
+  if (totalUsd > 0) totals.push(formatPrice(totalUsd, "USD"));
+
+  const text = `Hola ${storeName}! Vi su tienda 3D en ReUsa PY${
+    storeUrl ? ` (${storeUrl})` : ""
+  } y quiero consultar por este pedido:\n\n${lines.join("\n")}${
+    totals.length > 0 ? `\n\nTotal estimado: ${totals.join(" + ")}` : ""
+  }\n\n¿Tienen disponibilidad?`;
+
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -66,6 +108,8 @@ export function slugify(text: string): string {
 }
 
 export const CONDITION_LABELS: Record<string, string> = {
+  BRAND_NEW: "Nuevo (Tienda Oficial)",
+  OUTLET: "Outlet / Exhibición",
   LIKE_NEW: "Sin uso / Como nuevo",
   VERY_GOOD: "Muy bueno",
   GOOD: "Bueno",

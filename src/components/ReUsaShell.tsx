@@ -1,12 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { AppProvider, useApp, type WindowKind } from "@/components/AppContext";
+import {
+  AppProvider,
+  useApp,
+  type AppWorldModal,
+  type WindowKind,
+} from "@/components/AppContext";
 import { DesktopShell } from "@/components/desktop/DesktopShell";
 import { MobileShell } from "@/components/mobile/MobileShell";
-import type { WorldModal } from "@/components/world3d/ViceCityWorld";
 import type {
   CategoryDTO,
+  CommercialStoreDTO,
   DepartmentDTO,
   ListingDTO,
   UserDTO,
@@ -23,20 +28,29 @@ const ViceCityWorld = dynamic(
           REUSA VICE PY 3D
         </h1>
         <p className="mt-1.5 text-xs font-semibold text-cyan-200">
-          Cargando Ocean Boulevard y tus 10 tiendas en 3D...
+          Cargando Avenida de Marcas y tus tiendas en 3D...
         </p>
       </div>
     ),
   }
 );
 
-function ShellRouter({ initialModal }: { initialModal?: WorldModal }) {
+function ShellRouter({
+  initialModal,
+  initialCommercialStoreSlug,
+}: {
+  initialModal?: AppWorldModal;
+  initialCommercialStoreSlug?: string;
+}) {
   const { experienceMode, effectiveMode, toasts } = useApp();
 
   return (
     <>
       {experienceMode === "world3d" ? (
-        <ViceCityWorld initialModal={initialModal} />
+        <ViceCityWorld
+          initialModal={initialModal}
+          initialCommercialStoreSlug={initialCommercialStoreSlug}
+        />
       ) : effectiveMode === "mobile" ? (
         <MobileShell />
       ) : (
@@ -71,19 +85,23 @@ export function ReUsaShell({
   initialCategories,
   initialDepartments,
   initialListings,
+  initialCommercialStores = [],
   initialRoute,
+  initialCommercialStoreSlug,
 }: {
   initialUser: UserDTO | null;
   initialCategories: CategoryDTO[];
   initialDepartments: DepartmentDTO[];
   initialListings: ListingDTO[];
+  initialCommercialStores?: CommercialStoreDTO[];
   initialRoute?: {
     kind: WindowKind;
     payload?: Record<string, string>;
     title?: string;
   };
+  initialCommercialStoreSlug?: string;
 }) {
-  const initialModal: WorldModal = (() => {
+  const initialModal: AppWorldModal = (() => {
     if (!initialRoute || initialRoute.kind === "explorer") return null;
     if (initialRoute.kind === "listing" && initialRoute.payload?.slug) {
       return {
@@ -91,6 +109,19 @@ export function ReUsaShell({
         slug: initialRoute.payload.slug,
         title: initialRoute.title,
       };
+    }
+    if (initialRoute.kind === "commercialStore" && initialRoute.payload?.slug) {
+      return {
+        kind: "commercialStore",
+        slug: initialRoute.payload.slug,
+        title: initialRoute.title,
+      };
+    }
+    if (initialRoute.kind === "rentStore") {
+      return { kind: "rentStore" };
+    }
+    if (initialRoute.kind === "merchantDashboard") {
+      return { kind: "merchantDashboard", storeId: initialRoute.payload?.storeId };
     }
     if (initialRoute.kind === "publish") {
       return { kind: "publish", editId: initialRoute.payload?.editId };
@@ -114,10 +145,14 @@ export function ReUsaShell({
         initialCategories,
         initialDepartments,
         initialListings,
+        initialCommercialStores,
         initialRoute,
       }}
     >
-      <ShellRouter initialModal={initialModal} />
+      <ShellRouter
+        initialModal={initialModal}
+        initialCommercialStoreSlug={initialCommercialStoreSlug}
+      />
     </AppProvider>
   );
 }

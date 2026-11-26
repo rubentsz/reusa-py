@@ -1,37 +1,47 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserFavoriteSet, LISTING_INCLUDE, serializeListing } from "@/lib/listings-query";
-import type { CategoryDTO, DepartmentDTO, ListingDTO, UserDTO } from "@/types/marketplace";
+import { getActiveCommercialStores } from "@/lib/stores-query";
+import type {
+  CategoryDTO,
+  CommercialStoreDTO,
+  DepartmentDTO,
+  ListingDTO,
+  UserDTO,
+} from "@/types/marketplace";
 
 export async function getBootstrapData(): Promise<{
   initialUser: UserDTO | null;
   initialCategories: CategoryDTO[];
   initialDepartments: DepartmentDTO[];
   initialListings: ListingDTO[];
+  initialCommercialStores: CommercialStoreDTO[];
 }> {
-  const [user, rawCategories, rawDepartments, rawListings] = await Promise.all([
-    getCurrentUser(),
-    prisma.category.findMany({
-      where: { parentId: null },
-      orderBy: { order: "asc" },
-      include: { children: { orderBy: { order: "asc" } } },
-    }),
-    prisma.department.findMany({
-      orderBy: { name: "asc" },
-      include: {
-        cities: {
-          orderBy: { name: "asc" },
-          include: { neighborhoods: { orderBy: { name: "asc" } } },
+  const [user, rawCategories, rawDepartments, rawListings, initialCommercialStores] =
+    await Promise.all([
+      getCurrentUser(),
+      prisma.category.findMany({
+        where: { parentId: null },
+        orderBy: { order: "asc" },
+        include: { children: { orderBy: { order: "asc" } } },
+      }),
+      prisma.department.findMany({
+        orderBy: { name: "asc" },
+        include: {
+          cities: {
+            orderBy: { name: "asc" },
+            include: { neighborhoods: { orderBy: { name: "asc" } } },
+          },
         },
-      },
-    }),
-    prisma.listing.findMany({
-      where: { status: "ACTIVE" },
-      include: LISTING_INCLUDE,
-      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
-      take: 60,
-    }),
-  ]);
+      }),
+      prisma.listing.findMany({
+        where: { status: "ACTIVE" },
+        include: LISTING_INCLUDE,
+        orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+        take: 100,
+      }),
+      getActiveCommercialStores(),
+    ]);
 
   const favSet = await getUserFavoriteSet(user?.id);
 
@@ -70,5 +80,6 @@ export async function getBootstrapData(): Promise<{
     initialCategories,
     initialDepartments,
     initialListings,
+    initialCommercialStores,
   };
 }

@@ -25,12 +25,16 @@ export async function GET(request: Request) {
 
     const filters: ListingFilters & {
       sellerId?: string;
+      storeId?: string;
       status?: string;
       includeAllStatuses?: boolean;
     } = {
       q: searchParams.get("q") || undefined,
       category: searchParams.get("category") || undefined,
       subcategory: searchParams.get("subcategory") || undefined,
+      storeSlug: searchParams.get("storeSlug") || undefined,
+      sellerType:
+        (searchParams.get("sellerType") as ListingFilters["sellerType"]) || "",
       department: searchParams.get("department") || undefined,
       city: searchParams.get("city") || undefined,
       neighborhood: searchParams.get("neighborhood") || undefined,
@@ -53,6 +57,7 @@ export async function GET(request: Request) {
       bedroomsMin: searchParams.get("bedroomsMin") || undefined,
       apparelSize: searchParams.get("apparelSize") || undefined,
       sellerId: searchParams.get("sellerId") || undefined,
+      storeId: searchParams.get("storeId") || undefined,
       status: searchParams.get("status") || undefined,
       includeAllStatuses: searchParams.get("includeAll") === "true",
       sort: (searchParams.get("sort") as ListingFilters["sort"]) || "recent",
@@ -60,10 +65,17 @@ export async function GET(request: Request) {
 
     // Only owner or admin can request non-ACTIVE listings of a seller
     if (filters.includeAllStatuses) {
-      const canSeeAll =
+      let canSeeAll =
         currentUser &&
         (currentUser.role === "ADMIN" ||
           (filters.sellerId && currentUser.id === filters.sellerId));
+      if (!canSeeAll && currentUser && filters.storeId) {
+        const st = await prisma.commercialStore.findUnique({
+          where: { id: filters.storeId },
+          select: { ownerId: true },
+        });
+        if (st && st.ownerId === currentUser.id) canSeeAll = true;
+      }
       if (!canSeeAll) {
         filters.includeAllStatuses = false;
       }
@@ -80,7 +92,7 @@ export async function GET(request: Request) {
       orderBy = [{ price: "desc" }, { createdAt: "desc" }];
     }
 
-    const limit = Math.min(Number(searchParams.get("limit") || 60), 100);
+    const limit = Math.min(Number(searchParams.get("limit") || 100), 150);
 
     const [rows, total, favSet] = await Promise.all([
       prisma.listing.findMany({
@@ -108,7 +120,18 @@ const createListingSchema = z.object({
   description: z.string().trim().min(10, "Contanos un poco más del producto").max(4000),
   categoryId: z.string().min(1, "Elegí una categoría"),
   subcategoryId: z.string().optional().nullable(),
-  condition: z.enum(["LIKE_NEW", "VERY_GOOD", "GOOD", "WITH_DETAILS", "FOR_PARTS"]),
+  storeId: z.string().optional().nullable(),
+  condition: z.enum([
+    "BRAND_NEW",
+    "OUTLET",
+    "LIKE_NEW",
+    "VERY_GOOD",
+    "GOOD",
+    "WITH_DETAILS",
+    "FOR_PARTS",
+  ]),
+  sku: z.string().trim().max(48).optional().nullable(),
+  stockQuantity: z.number().int().min(0).max(99999).optional().nullable(),
   isFree: z.boolean().default(false),
   currency: z.enum(["PYG", "USD"]).default("PYG"),
   price: z.number().min(0).default(0),
@@ -180,6 +203,37 @@ export async function POST(request: Request) {
       );
     }
 
+    // Verify commercial store ownership & plan limit if attaching to a store
+    let resolvedStoreId: string | null = null;
+    let resolvedSellerId = user.id;
+    let storeIsFeatured = false;
+    if (data.storeId) {
+      const store = await prisma.commercialStore.findUnique({
+        where: { id: data.storeId },
+        include: { _count: { select: { listings: { where: { status: "ACTIVE" } } } } },
+      });
+      if (!store) {
+        return NextResponse.json({ error: "Tienda comercial no encontrada" }, { status: 404 });
+      }
+      if (store.ownerId !== user.id && user.role !== "ADMIN") {
+        return NextResponse.json(
+          { error: "No tenés permisos para cargar productos en esta tienda" },
+          { status: 403 }
+        );
+      }
+      if (store._count.listings >= store.maxProducts) {
+        return NextResponse.json(
+          {
+            error: `Esta tienda alcanzó el límite de ${store.maxProducts} productos de su plan. Actualizá tu plan para agregar más.`,
+          },
+          { status: 400 }
+        );
+      }
+      resolvedStoreId = store.id;
+      resolvedSellerId = store.ownerId;
+      storeIsFeatured = store.planTier !== "BASIC";
+    }
+
     const [category, department, city, neighborhood] = await Promise.all([
       prisma.category.findUnique({ where: { id: data.categoryId } }),
       prisma.department.findUnique({ where: { id: data.departmentId } }),
@@ -210,7 +264,7 @@ export async function POST(request: Request) {
     const baseLat = neighborhood?.lat ?? city.lat;
     const baseLng = neighborhood?.lng ?? city.lng;
     const jitter = addPrivacyJitter(baseLat, baseLng, slug);
-    const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + (resolvedStoreId ? 180 : 60) * 24 * 60 * 60 * 1000);
 
     const hasExplicitCover = data.images.some((img) => img.isCover);
 
@@ -219,17 +273,21 @@ export async function POST(request: Request) {
         slug,
         title: data.title,
         description: data.description,
-        sellerId: user.id,
+        sellerId: resolvedSellerId,
+        storeId: resolvedStoreId,
         categoryId: data.categoryId,
         subcategoryId: data.subcategoryId || null,
         status: "ACTIVE",
         condition: data.condition,
+        sku: data.sku || null,
+        stockQuantity: data.stockQuantity ?? null,
         isFree: data.isFree,
         currency: data.currency,
         price: effectivePrice,
         referenceNewPrice: data.isFree ? null : data.referenceNewPrice ?? null,
         referenceNewUrl: cleanRefUrl,
         savingsPercent,
+        isFeatured: storeIsFeatured,
         isNegotiable: data.isFree ? false : data.isNegotiable,
         acceptsTrade: data.isFree ? false : data.acceptsTrade,
         pickupInPerson: scheduleVisitOnly ? false : data.pickupInPerson,

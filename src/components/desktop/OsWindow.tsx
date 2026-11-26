@@ -2,6 +2,7 @@
 
 import React, { useRef } from "react";
 import {
+  BarChart3,
   Columns2,
   FolderOpen,
   Heart,
@@ -13,6 +14,8 @@ import {
   Minus,
   PlusSquare,
   Shield,
+  Sparkles,
+  Store,
   Tag,
   User,
   X,
@@ -40,6 +43,12 @@ function WindowIcon({ kind }: { kind: WindowKind }) {
       return <Shield className="h-4 w-4 text-amber-600" />;
     case "auth":
       return <KeyRound className="h-4 w-4 text-[#0067c0]" />;
+    case "commercialStore":
+      return <Store className="h-4 w-4 text-fuchsia-600" />;
+    case "rentStore":
+      return <Sparkles className="h-4 w-4 text-amber-500" />;
+    case "merchantDashboard":
+      return <BarChart3 className="h-4 w-4 text-cyan-600" />;
   }
 }
 

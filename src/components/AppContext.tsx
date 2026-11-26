@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CategoryDTO,
+  CommercialStoreDTO,
   ConversationDTO,
   DepartmentDTO,
   ListingDTO,
@@ -21,7 +22,10 @@ export type WindowKind =
   | "favorites"
   | "profile"
   | "admin"
-  | "auth";
+  | "auth"
+  | "commercialStore"
+  | "rentStore"
+  | "merchantDashboard";
 
 export interface WindowInstance {
   id: string;
@@ -40,8 +44,22 @@ export interface WindowInstance {
 export type MobileTab = "home" | "map" | "publish" | "chat" | "profile";
 
 export interface MobileOverlay {
-  kind: "listing" | "profile" | "auth" | "favorites" | "admin" | "publish";
+  kind:
+    | "listing"
+    | "profile"
+    | "auth"
+    | "favorites"
+    | "admin"
+    | "publish"
+    | "commercialStore"
+    | "rentStore"
+    | "merchantDashboard";
   payload?: Record<string, string>;
+}
+
+export interface StoreCartItem {
+  listing: ListingDTO;
+  qty: number;
 }
 
 export interface ToastItem {
@@ -50,11 +68,25 @@ export interface ToastItem {
   tone?: "info" | "success" | "error";
 }
 
+export type AppWorldModal =
+  | { kind: "listing"; slug: string; title?: string }
+  | { kind: "publish"; editId?: string }
+  | { kind: "chat"; conversationId?: string }
+  | { kind: "favorites" }
+  | { kind: "profile"; userId?: string }
+  | { kind: "auth" }
+  | { kind: "admin" }
+  | { kind: "commercialStore"; slug: string; title?: string }
+  | { kind: "rentStore"; defaultPlan?: "BASIC" | "FEATURED" | "FLAGSHIP" }
+  | { kind: "merchantDashboard"; storeId?: string }
+  | null;
+
 interface InitialAppData {
   initialUser: UserDTO | null;
   initialCategories: CategoryDTO[];
   initialDepartments: DepartmentDTO[];
   initialListings: ListingDTO[];
+  initialCommercialStores?: CommercialStoreDTO[];
   initialRoute?: {
     kind: WindowKind;
     payload?: Record<string, string>;
@@ -79,6 +111,19 @@ interface AppContextValue {
   updateFilters: (patch: Partial<ListingFilters>) => void;
   resetFilters: () => void;
   refreshListings: (overrideFilters?: ListingFilters) => Promise<void>;
+
+  // Commercial Stores ("Avenida de Marcas 3D")
+  commercialStores: CommercialStoreDTO[];
+  myStores: CommercialStoreDTO[];
+  refreshCommercialStores: () => Promise<void>;
+  storeCart: Record<string, StoreCartItem[]>;
+  addToStoreCart: (storeId: string, listing: ListingDTO) => void;
+  updateStoreCartQty: (storeId: string, listingId: string, delta: number) => void;
+  clearStoreCart: (storeId: string) => void;
+  trackStoreEvent: (
+    storeIdOrSlug: string,
+    event: "visit" | "product_click" | "whatsapp_click"
+  ) => void;
 
   favoriteIds: Set<string>;
   toggleFavorite: (listingId: string) => Promise<void>;
@@ -109,27 +154,8 @@ interface AppContextValue {
   // 3D Vice City vs Classic OS/App mode
   experienceMode: "world3d" | "classic";
   setExperienceMode: (m: "world3d" | "classic") => void;
-  worldModal:
-    | { kind: "listing"; slug: string; title?: string }
-    | { kind: "publish"; editId?: string }
-    | { kind: "chat"; conversationId?: string }
-    | { kind: "favorites" }
-    | { kind: "profile"; userId?: string }
-    | { kind: "auth" }
-    | { kind: "admin" }
-    | null;
-  setWorldModal: React.Dispatch<
-    React.SetStateAction<
-      | { kind: "listing"; slug: string; title?: string }
-      | { kind: "publish"; editId?: string }
-      | { kind: "chat"; conversationId?: string }
-      | { kind: "favorites" }
-      | { kind: "profile"; userId?: string }
-      | { kind: "auth" }
-      | { kind: "admin" }
-      | null
-    >
-  >;
+  worldModal: AppWorldModal;
+  setWorldModal: React.Dispatch<React.SetStateAction<AppWorldModal>>;
 
   // Mobile App navigation
   isMobileViewport: boolean;
@@ -150,6 +176,9 @@ interface AppContextValue {
   openFavorites: () => void;
   openAdmin: () => void;
   openAuth: () => void;
+  openCommercialStore: (slug: string, title?: string) => void;
+  openRentStore: (defaultPlan?: "BASIC" | "FEATURED" | "FLAGSHIP") => void;
+  openMerchantDashboard: (storeId?: string) => void;
   openExplorerWithFilters: (patch: Partial<ListingFilters>, resetFirst?: boolean) => void;
   startChatForListing: (listingId: string) => Promise<void>;
 
@@ -249,6 +278,12 @@ export function AppProvider({
   const [loadingListings, setLoadingListings] = useState<boolean>(false);
   const [filters, setFilters] = useState<ListingFilters>(DEFAULT_FILTERS);
 
+  const [commercialStores, setCommercialStores] = useState<CommercialStoreDTO[]>(
+    initialData.initialCommercialStores ?? []
+  );
+  const [myStores, setMyStores] = useState<CommercialStoreDTO[]>([]);
+  const [storeCart, setStoreCart] = useState<Record<string, StoreCartItem[]>>({});
+
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(
     () => new Set(initialData.initialListings.filter((l) => l.isFavorited).map((l) => l.id))
   );
@@ -260,7 +295,7 @@ export function AppProvider({
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const [experienceMode, setExperienceMode] = useState<"world3d" | "classic">("world3d");
-  const [worldModal, setWorldModal] = useState<AppContextValue["worldModal"]>(null);
+  const [worldModal, setWorldModal] = useState<AppWorldModal>(null);
 
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(false);
   const [forceViewMode, setForceViewMode] = useState<"auto" | "desktop" | "mobile">("auto");
@@ -268,7 +303,17 @@ export function AppProvider({
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay | null>(() => {
     const r = initialData.initialRoute;
     if (!r || r.kind === "explorer") return null;
-    if (r.kind === "listing" || r.kind === "profile" || r.kind === "auth" || r.kind === "favorites" || r.kind === "admin" || r.kind === "publish") {
+    if (
+      r.kind === "listing" ||
+      r.kind === "profile" ||
+      r.kind === "auth" ||
+      r.kind === "favorites" ||
+      r.kind === "admin" ||
+      r.kind === "publish" ||
+      r.kind === "commercialStore" ||
+      r.kind === "rentStore" ||
+      r.kind === "merchantDashboard"
+    ) {
       return { kind: r.kind, payload: r.payload };
     }
     return null;
@@ -411,6 +456,73 @@ export function AppProvider({
     } catch {}
   }, []);
 
+  const refreshCommercialStores = useCallback(async () => {
+    try {
+      const [pubRes, mineRes] = await Promise.all([
+        fetch("/api/stores"),
+        user ? fetch("/api/stores?mine=true") : Promise.resolve(null),
+      ]);
+      if (pubRes.ok) {
+        const data = await pubRes.json();
+        setCommercialStores(data.stores ?? []);
+      }
+      if (mineRes && mineRes.ok) {
+        const data = await mineRes.json();
+        setMyStores(data.stores ?? []);
+      } else if (!user) {
+        setMyStores([]);
+      }
+    } catch {}
+  }, [user]);
+
+  const addToStoreCart = useCallback(
+    (storeId: string, listing: ListingDTO) => {
+      setStoreCart((prev) => {
+        const cur = prev[storeId] ?? [];
+        const existing = cur.find((item) => item.listing.id === listing.id);
+        const next = existing
+          ? cur.map((item) =>
+              item.listing.id === listing.id ? { ...item, qty: item.qty + 1 } : item
+            )
+          : [...cur, { listing, qty: 1 }];
+        return { ...prev, [storeId]: next };
+      });
+      notifyToast(`Agregado al pedido: ${listing.title}`, "success");
+    },
+    [notifyToast]
+  );
+
+  const updateStoreCartQty = useCallback(
+    (storeId: string, listingId: string, delta: number) => {
+      setStoreCart((prev) => {
+        const cur = prev[storeId] ?? [];
+        const next = cur
+          .map((item) =>
+            item.listing.id === listingId ? { ...item, qty: item.qty + delta } : item
+          )
+          .filter((item) => item.qty > 0);
+        return { ...prev, [storeId]: next };
+      });
+    },
+    []
+  );
+
+  const clearStoreCart = useCallback((storeId: string) => {
+    setStoreCart((prev) => ({ ...prev, [storeId]: [] }));
+  }, []);
+
+  const trackStoreEvent = useCallback(
+    (storeIdOrSlug: string, event: "visit" | "product_click" | "whatsapp_click") => {
+      if (!storeIdOrSlug) return;
+      fetch(`/api/stores/${encodeURIComponent(storeIdOrSlug)}/track`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event }),
+      }).catch(() => {});
+    },
+    []
+  );
+
   const refreshListings = useCallback(
     async (overrideFilters?: ListingFilters) => {
       const active = overrideFilters ?? filters;
@@ -420,6 +532,8 @@ export function AppProvider({
         if (active.q) params.set("q", active.q);
         if (active.category) params.set("category", active.category);
         if (active.subcategory) params.set("subcategory", active.subcategory);
+        if (active.storeSlug) params.set("storeSlug", active.storeSlug);
+        if (active.sellerType) params.set("sellerType", active.sellerType);
         if (active.department) params.set("department", active.department);
         if (active.city) params.set("city", active.city);
         if (active.neighborhood) params.set("neighborhood", active.neighborhood);
@@ -469,6 +583,7 @@ export function AppProvider({
       refreshNotifications();
       refreshConversations();
       refreshSavedSearches();
+      refreshCommercialStores();
       fetch("/api/favorites")
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -483,9 +598,10 @@ export function AppProvider({
       setConversations([]);
       setUnreadChatCount(0);
       setSavedSearches([]);
+      setMyStores([]);
       setFavoriteIds(new Set());
     }
-  }, [user, refreshConversations, refreshNotifications, refreshSavedSearches]);
+  }, [user, refreshConversations, refreshNotifications, refreshSavedSearches, refreshCommercialStores]);
 
   // Refetch listings when filters change (skip initial exact default mount)
   const mountedRef = useRef(false);
@@ -557,8 +673,11 @@ export function AppProvider({
           map: "Mapa de Zonas — Paraguay",
           favorites: "Favoritos y Alertas",
           profile: "Perfil — ReUsa PY",
-          admin: "Panel de Moderación",
+          admin: "Panel Admin y Tiendas — ReUsa PY",
           auth: "Cuenta — ReUsa PY",
+          commercialStore: "Tienda Oficial — ReUsa PY",
+          rentStore: "Alquilá tu Local 3D — ReUsa PY",
+          merchantDashboard: "Panel de Mi Tienda — ReUsa PY",
         };
         return [
           ...prev,
@@ -818,6 +937,72 @@ export function AppProvider({
     }
   }, [effectiveMode, experienceMode, notifyToast, openWindow, user]);
 
+  const openCommercialStore = useCallback(
+    (slug: string, title?: string) => {
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "commercialStore", slug, title });
+        return;
+      }
+      if (effectiveMode === "mobile") {
+        setMobileOverlay({ kind: "commercialStore", payload: { slug } });
+      } else {
+        openWindow("commercialStore", {
+          title: title || "Tienda Oficial — ReUsa PY",
+          payload: { slug },
+          uniqueKey: `store:${slug}`,
+        });
+      }
+    },
+    [effectiveMode, experienceMode, openWindow]
+  );
+
+  const openRentStore = useCallback(
+    (defaultPlan?: "BASIC" | "FEATURED" | "FLAGSHIP") => {
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "rentStore", defaultPlan });
+        return;
+      }
+      if (effectiveMode === "mobile") {
+        setMobileOverlay({
+          kind: "rentStore",
+          payload: defaultPlan ? { defaultPlan } : undefined,
+        });
+      } else {
+        openWindow("rentStore", {
+          title: "Abrir mi Local 3D — ReUsa PY",
+          payload: defaultPlan ? { defaultPlan } : undefined,
+        });
+      }
+    },
+    [effectiveMode, experienceMode, openWindow]
+  );
+
+  const openMerchantDashboard = useCallback(
+    (storeId?: string) => {
+      if (!user) {
+        notifyToast("Iniciá sesión para gestionar tu tienda", "info");
+        openAuth();
+        return;
+      }
+      if (experienceMode === "world3d") {
+        setWorldModal({ kind: "merchantDashboard", storeId });
+        return;
+      }
+      if (effectiveMode === "mobile") {
+        setMobileOverlay({
+          kind: "merchantDashboard",
+          payload: storeId ? { storeId } : undefined,
+        });
+      } else {
+        openWindow("merchantDashboard", {
+          title: "Mi Tienda Oficial — Panel de Gestión",
+          payload: storeId ? { storeId } : undefined,
+        });
+      }
+    },
+    [effectiveMode, experienceMode, notifyToast, openAuth, openWindow, user]
+  );
+
   const openExplorerWithFilters = useCallback(
     (patch: Partial<ListingFilters>, resetFirst = false) => {
       setFilters((prev) => (resetFirst ? { ...DEFAULT_FILTERS, ...patch } : { ...prev, ...patch }));
@@ -912,6 +1097,14 @@ export function AppProvider({
       updateFilters,
       resetFilters,
       refreshListings,
+      commercialStores,
+      myStores,
+      refreshCommercialStores,
+      storeCart,
+      addToStoreCart,
+      updateStoreCartQty,
+      clearStoreCart,
+      trackStoreEvent,
       favoriteIds,
       toggleFavorite,
       notifications,
@@ -952,6 +1145,9 @@ export function AppProvider({
       openFavorites,
       openAdmin,
       openAuth,
+      openCommercialStore,
+      openRentStore,
+      openMerchantDashboard,
       openExplorerWithFilters,
       startChatForListing,
       toasts,
@@ -970,6 +1166,14 @@ export function AppProvider({
       updateFilters,
       resetFilters,
       refreshListings,
+      commercialStores,
+      myStores,
+      refreshCommercialStores,
+      storeCart,
+      addToStoreCart,
+      updateStoreCartQty,
+      clearStoreCart,
+      trackStoreEvent,
       favoriteIds,
       toggleFavorite,
       notifications,
@@ -1005,6 +1209,9 @@ export function AppProvider({
       openFavorites,
       openAdmin,
       openAuth,
+      openCommercialStore,
+      openRentStore,
+      openMerchantDashboard,
       openExplorerWithFilters,
       startChatForListing,
       toasts,

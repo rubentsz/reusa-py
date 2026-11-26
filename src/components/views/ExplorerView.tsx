@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  BadgeCheck,
   BellPlus,
   Bookmark,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Store,
   X,
 } from "lucide-react";
 import { useApp } from "@/components/AppContext";
@@ -31,6 +33,7 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
     user,
     categories,
     departments,
+    commercialStores,
     listings,
     totalListings,
     loadingListings,
@@ -42,6 +45,8 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
     openListing,
     openPublish,
     openAuth,
+    openCommercialStore,
+    openRentStore,
     notifyToast,
   } = useApp();
 
@@ -83,6 +88,8 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
         filters.isNegotiable ||
         filters.acceptsTrade ||
         filters.delivery ||
+        filters.sellerType ||
+        filters.storeSlug ||
         filters.vehicleBrand ||
         filters.vehicleYearMin ||
         filters.vehicleTransmission ||
@@ -478,6 +485,103 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
           </div>
         </div>
 
+        {/* Seller Type Filter Pills (Todos / Tiendas Oficiales / Particulares) */}
+        <div className="mt-2.5 flex items-center gap-1.5 px-3.5">
+          {(
+            [
+              { key: undefined, label: "Todos" },
+              { key: "official", label: "★ Tiendas Oficiales" },
+              { key: "individual", label: "Particulares" },
+            ] as const
+          ).map((opt) => {
+            const active = filters.sellerType === opt.key;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => updateFilters({ sellerType: opt.key })}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${
+                  active
+                    ? opt.key === "official"
+                      ? "bg-fuchsia-600 text-white shadow-xs"
+                      : "bg-[#0067c0] text-white shadow-xs"
+                    : "border border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Official Brand Stores Carousel on Mobile */}
+        {!hasActiveFilters && (
+          <section className="mt-3 px-3.5">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Store className="h-4 w-4 text-fuchsia-600" />
+                <h2 className="text-sm font-bold text-slate-900">Tiendas Oficiales 3D</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => openRentStore()}
+                className="text-xs font-bold text-fuchsia-700"
+              >
+                + Tu Marca Aquí
+              </button>
+            </div>
+            <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1">
+              {commercialStores.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => openCommercialStore(st.slug, st.name)}
+                  style={{ borderColor: `${st.neonColor}45` }}
+                  className="flex w-48 shrink-0 items-center gap-2.5 rounded-xl border bg-white p-2.5 text-left shadow-2xs transition active:scale-[0.98]"
+                >
+                  {st.logoUrl ? (
+                    <img
+                      src={st.logoUrl}
+                      alt={st.name}
+                      className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 bg-slate-900 object-contain p-1"
+                    />
+                  ) : (
+                    <div
+                      style={{ backgroundColor: st.neonColor }}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white"
+                    >
+                      <Store className="h-4 w-4" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="truncate text-xs font-extrabold text-slate-900">
+                        {st.name}
+                      </span>
+                      <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" />
+                    </div>
+                    <p className="truncate text-[10px] text-slate-500">
+                      {st.city?.name || "Paraguay"} · {st.activeListingsCount} prod.
+                    </p>
+                  </div>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => openRentStore()}
+                className="flex w-44 shrink-0 flex-col justify-center rounded-xl border border-dashed border-amber-400 bg-amber-50/75 p-2.5 text-left"
+              >
+                <span className="text-[11px] font-extrabold text-amber-900">
+                  ★ Alquilá tu Local 3D
+                </span>
+                <span className="mt-0.5 text-[10px] text-amber-800/80">
+                  Logo + catálogo en Avenida de Marcas
+                </span>
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Curated savings strip on mobile home when unfiltered */}
         {!hasActiveFilters && topSavingsListings.length > 0 && (
           <section className="mt-3 px-3.5">
@@ -680,6 +784,22 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
             }`}
           >
             <Gift className="h-3.5 w-3.5" /> Gratis
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              updateFilters({
+                sellerType: filters.sellerType === "official" ? undefined : "official",
+              })
+            }
+            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+              filters.sellerType === "official"
+                ? "bg-fuchsia-100 font-semibold text-fuchsia-800"
+                : "text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            <Store className="h-3.5 w-3.5 text-fuchsia-600" /> Tiendas Oficiales
           </button>
 
           {hasActiveFilters && (
@@ -988,6 +1108,95 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
             </div>
           ) : (
             <>
+              {/* Avenida de Marcas — Official Brand Stores Strip */}
+              {!hasActiveFilters && (
+                <section className="mb-4 rounded-2xl border border-fuchsia-200/80 bg-gradient-to-r from-fuchsia-50/90 via-white to-cyan-50/80 p-3.5">
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-600 to-cyan-600 text-white shadow-xs">
+                        <Store className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <h2 className="text-sm font-bold text-slate-900">
+                          Avenida de Marcas · Tiendas Oficiales 3D
+                        </h2>
+                        <p className="text-[11px] text-slate-600">
+                          Locales comerciales reales en Paraguay con catálogo oficial, stock y pedido directo por WhatsApp
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateFilters({ sellerType: "official" })}
+                        className="rounded-lg border border-fuchsia-200 bg-white px-2.5 py-1 text-xs font-semibold text-fuchsia-700 transition hover:bg-fuchsia-50"
+                      >
+                        Ver productos oficiales
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openRentStore()}
+                        className="rounded-lg bg-gradient-to-r from-amber-500 to-fuchsia-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs transition hover:brightness-110"
+                      >
+                        + Alquilá tu Local 3D
+                      </button>
+                    </div>
+                  </div>
+                  <div className="fluent-scroll flex gap-3 overflow-x-auto pb-1">
+                    {commercialStores.map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => openCommercialStore(st.slug, st.name)}
+                        style={{ borderColor: `${st.neonColor}45` }}
+                        className="group flex w-60 shrink-0 items-center gap-3 rounded-xl border bg-white p-2.5 text-left shadow-2xs transition hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        {st.logoUrl ? (
+                          <img
+                            src={st.logoUrl}
+                            alt={st.name}
+                            className="h-11 w-11 shrink-0 rounded-xl border border-slate-200 bg-slate-900 object-contain p-1"
+                          />
+                        ) : (
+                          <div
+                            style={{ backgroundColor: st.neonColor }}
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
+                          >
+                            <Store className="h-5 w-5" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            <span className="truncate text-xs font-extrabold text-slate-900 group-hover:text-fuchsia-700">
+                              {st.name}
+                            </span>
+                            <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" />
+                          </div>
+                          {st.tagline && (
+                            <p className="truncate text-[10.5px] text-slate-500">{st.tagline}</p>
+                          )}
+                          <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                            {st.city?.name || "Paraguay"} · {st.activeListingsCount} productos
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => openRentStore()}
+                      className="flex w-52 shrink-0 flex-col justify-center rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/70 p-3 text-left transition hover:border-amber-500 hover:bg-amber-50"
+                    >
+                      <span className="text-xs font-extrabold text-amber-900">
+                        ★ LOCAL DISPONIBLE
+                      </span>
+                      <span className="mt-0.5 text-[10.5px] text-amber-800/80">
+                        Colocá el logo y catálogo de tu negocio en ReUsa PY 3D
+                      </span>
+                    </button>
+                  </div>
+                </section>
+              )}
+
               {/* Curated Top Savings strip when unfiltered */}
               {!hasActiveFilters && topSavingsListings.length > 0 && (
                 <section className="mb-5 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50/90 via-teal-50/60 to-sky-50/70 p-3.5">
@@ -1025,7 +1234,9 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h1 className="text-sm font-bold text-slate-900">
-                    {selectedCategory
+                    {filters.sellerType === "official"
+                      ? "Catálogo de Tiendas Oficiales en Paraguay"
+                      : selectedCategory
                       ? selectedCategory.name
                       : filters.isFree
                       ? "Artículos Gratis / Regalo"

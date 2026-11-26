@@ -11,6 +11,7 @@ import {
   Monitor,
   Plus,
   Sparkles,
+  Store,
   User,
 } from "lucide-react";
 import { useApp } from "@/components/AppContext";
@@ -22,6 +23,9 @@ import { FavoritesAlertsView } from "@/components/views/FavoritesAlertsView";
 import { ProfileView } from "@/components/views/ProfileView";
 import { AuthView } from "@/components/views/AuthView";
 import { AdminModerationView } from "@/components/views/AdminModerationView";
+import { CommercialStoreView } from "@/components/views/CommercialStoreView";
+import { RentStoreView } from "@/components/views/RentStoreView";
+import { MerchantDashboardView } from "@/components/views/MerchantDashboardView";
 import { ZoneMap } from "@/components/ZoneMap";
 import { formatRelativeDate } from "@/lib/format";
 
@@ -29,12 +33,14 @@ export function MobileShell() {
   const {
     user,
     listings,
+    myStores,
     mobileTab,
     setMobileTab,
     mobileOverlay,
     setMobileOverlay,
     openListing,
     openChat,
+    openMerchantDashboard,
     unreadChatCount,
     notifications,
     unreadNotifCount,
@@ -49,6 +55,14 @@ export function MobileShell() {
 
   const isDesktopPreviewingMobile = !isMobileViewport && forceViewMode === "mobile";
 
+  const handleEnter3DStore = (storeSlug: string) => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/tienda/${storeSlug}`;
+    } else {
+      setExperienceMode("world3d");
+    }
+  };
+
   const content = (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#f4f7fb]">
       {/* Mobile App Top Bar */}
@@ -62,6 +76,15 @@ export function MobileShell() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {myStores.length > 0 && (
+            <button
+              type="button"
+              onClick={() => openMerchantDashboard(myStores[0].id)}
+              className="inline-flex items-center gap-1 rounded-full bg-cyan-600 px-2.5 py-1 text-[11px] font-extrabold text-white shadow-sm"
+            >
+              <Store className="h-3 w-3" /> Mi Tienda
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setExperienceMode("world3d")}
@@ -166,7 +189,7 @@ export function MobileShell() {
         {mobileTab === "profile" && <ProfileView userId={user?.id} />}
       </main>
 
-      {/* Full-screen App Overlay Sheet (Detail / Auth / Seller Profile / Favorites / Admin) */}
+      {/* Full-screen App Overlay Sheet (Detail / Auth / Seller Profile / Favorites / Admin / Stores) */}
       {mobileOverlay && (
         <div className="absolute inset-0 z-50 flex flex-col bg-white">
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 px-3">
@@ -187,9 +210,12 @@ export function MobileShell() {
               {mobileOverlay.kind === "listing" && "Detalle de publicación"}
               {mobileOverlay.kind === "profile" && "Perfil del vendedor"}
               {mobileOverlay.kind === "favorites" && "Favoritos y Alertas"}
-              {mobileOverlay.kind === "admin" && "Panel de Moderación"}
+              {mobileOverlay.kind === "admin" && "Panel Admin y Tiendas"}
               {mobileOverlay.kind === "auth" && "Cuenta ReUsa PY"}
               {mobileOverlay.kind === "publish" && "Editar publicación"}
+              {mobileOverlay.kind === "commercialStore" && "Tienda Oficial"}
+              {mobileOverlay.kind === "rentStore" && "Alquilá tu Local 3D"}
+              {mobileOverlay.kind === "merchantDashboard" && "Panel de Mi Tienda"}
             </span>
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -213,6 +239,29 @@ export function MobileShell() {
                 onSuccess={(slug) => {
                   setMobileOverlay({ kind: "listing", payload: { slug } });
                 }}
+              />
+            )}
+            {mobileOverlay.kind === "commercialStore" && (
+              <CommercialStoreView
+                slug={mobileOverlay.payload?.slug || ""}
+                onEnter3DStore={handleEnter3DStore}
+              />
+            )}
+            {mobileOverlay.kind === "rentStore" && (
+              <RentStoreView
+                defaultPlan={
+                  (mobileOverlay.payload?.defaultPlan as
+                    | "BASIC"
+                    | "FEATURED"
+                    | "FLAGSHIP"
+                    | undefined) || "FEATURED"
+                }
+              />
+            )}
+            {mobileOverlay.kind === "merchantDashboard" && (
+              <MerchantDashboardView
+                initialStoreId={mobileOverlay.payload?.storeId}
+                onEnter3DStore={handleEnter3DStore}
               />
             )}
           </div>

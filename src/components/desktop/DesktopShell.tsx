@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  BarChart3,
   Bell,
   Car,
   CheckCheck,
@@ -15,6 +16,7 @@ import {
   Shield,
   Smartphone,
   Sparkles,
+  Store,
   Tag,
   User,
 } from "lucide-react";
@@ -29,6 +31,9 @@ import { FavoritesAlertsView } from "@/components/views/FavoritesAlertsView";
 import { ProfileView } from "@/components/views/ProfileView";
 import { AuthView } from "@/components/views/AuthView";
 import { AdminModerationView } from "@/components/views/AdminModerationView";
+import { CommercialStoreView } from "@/components/views/CommercialStoreView";
+import { RentStoreView } from "@/components/views/RentStoreView";
+import { MerchantDashboardView } from "@/components/views/MerchantDashboardView";
 import { ZoneMap } from "@/components/ZoneMap";
 import { formatRelativeDate } from "@/lib/format";
 
@@ -36,6 +41,7 @@ export function DesktopShell() {
   const {
     user,
     listings,
+    myStores,
     windows,
     activeWindowId,
     focusWindow,
@@ -51,6 +57,8 @@ export function DesktopShell() {
     openProfile,
     openAdmin,
     openAuth,
+    openRentStore,
+    openMerchantDashboard,
     notifications,
     unreadNotifCount,
     markNotificationRead,
@@ -79,6 +87,14 @@ export function DesktopShell() {
     const id = setInterval(updateClock, 20000);
     return () => clearInterval(id);
   }, []);
+
+  const handleEnter3DStore = (storeSlug: string) => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/tienda/${storeSlug}`;
+    } else {
+      setExperienceMode("world3d");
+    }
+  };
 
   const renderWindowBody = (win: WindowInstance) => {
     switch (win.kind) {
@@ -121,6 +137,29 @@ export function DesktopShell() {
         return <AdminModerationView />;
       case "auth":
         return <AuthView onAuthenticated={() => closeWindow(win.id)} />;
+      case "commercialStore":
+        return (
+          <CommercialStoreView
+            slug={win.payload?.slug || ""}
+            onEnter3DStore={handleEnter3DStore}
+          />
+        );
+      case "rentStore":
+        return (
+          <RentStoreView
+            defaultPlan={
+              (win.payload?.defaultPlan as "BASIC" | "FEATURED" | "FLAGSHIP" | undefined) ||
+              "FEATURED"
+            }
+          />
+        );
+      case "merchantDashboard":
+        return (
+          <MerchantDashboardView
+            initialStoreId={win.payload?.storeId}
+            onEnter3DStore={handleEnter3DStore}
+          />
+        );
     }
   };
 
@@ -162,6 +201,22 @@ export function DesktopShell() {
       onClick: () => openPublish(),
     },
     {
+      label: "Alquilá Local 3D",
+      icon: Store,
+      bg: "bg-gradient-to-br from-fuchsia-600 to-amber-500",
+      onClick: () => openRentStore(),
+    },
+    ...(myStores.length > 0
+      ? [
+          {
+            label: "Mi Tienda",
+            icon: BarChart3,
+            bg: "bg-cyan-700",
+            onClick: () => openMerchantDashboard(myStores[0].id),
+          },
+        ]
+      : []),
+    {
       label: "Mensajes",
       icon: MessageCircle,
       bg: "bg-indigo-600",
@@ -176,7 +231,7 @@ export function DesktopShell() {
     ...(user?.role === "ADMIN"
       ? [
           {
-            label: "Moderación",
+            label: "Admin / Tiendas",
             icon: Shield,
             bg: "bg-slate-800",
             onClick: () => openAdmin(),
@@ -375,6 +430,9 @@ export function DesktopShell() {
                   {win.kind === "favorites" && <Heart className="h-3.5 w-3.5 shrink-0 text-rose-500" />}
                   {win.kind === "profile" && <User className="h-3.5 w-3.5 shrink-0 text-indigo-600" />}
                   {win.kind === "admin" && <Shield className="h-3.5 w-3.5 shrink-0 text-amber-600" />}
+                  {win.kind === "commercialStore" && <Store className="h-3.5 w-3.5 shrink-0 text-fuchsia-600" />}
+                  {win.kind === "rentStore" && <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                  {win.kind === "merchantDashboard" && <BarChart3 className="h-3.5 w-3.5 shrink-0 text-cyan-600" />}
                   <span className="truncate">{win.title.replace(" — ReUsa PY", "")}</span>
                   {/* Windows 11 active indicator pill */}
                   <span

@@ -16,29 +16,31 @@ model Country {
 }
 
 model Department {
-  id        String    @id @default(cuid())
-  countryId String
-  country   Country   @relation(fields: [countryId], references: [id], onDelete: Cascade)
-  name      String
-  slug      String    @unique
-  lat       Float
-  lng       Float
-  cities    City[]
-  listings  Listing[]
-  users     User[]
+  id               String            @id @default(cuid())
+  countryId        String
+  country          Country           @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name             String
+  slug             String            @unique
+  lat              Float
+  lng              Float
+  cities           City[]
+  listings         Listing[]
+  users            User[]
+  commercialStores CommercialStore[]
 }
 
 model City {
-  id            String         @id @default(cuid())
-  departmentId  String
-  department    Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  name          String
-  slug          String         @unique
-  lat           Float
-  lng           Float
-  neighborhoods Neighborhood[]
-  listings      Listing[]
-  users         User[]
+  id               String            @id @default(cuid())
+  departmentId     String
+  department       Department        @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  name             String
+  slug             String            @unique
+  lat              Float
+  lng              Float
+  neighborhoods    Neighborhood[]
+  listings         Listing[]
+  users            User[]
+  commercialStores CommercialStore[]
 }
 
 model Neighborhood {
@@ -53,90 +55,170 @@ model Neighborhood {
 }
 
 model Category {
-  id                 String     @id @default(cuid())
-  name               String
-  slug               String     @unique
-  icon               String     @default("Package")
-  verticalType       String     @default("GENERAL") // GENERAL | VEHICLE | REAL_ESTATE | APPAREL
-  order              Int        @default(0)
-  parentId           String?
-  parent             Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children           Category[] @relation("CategoryTree")
-  listings           Listing[]  @relation("PrimaryCategory")
-  subcategoryListings Listing[] @relation("SubCategory")
+  id                  String            @id @default(cuid())
+  name                String
+  slug                String            @unique
+  icon                String            @default("Package")
+  verticalType        String            @default("GENERAL") // GENERAL | VEHICLE | REAL_ESTATE | APPAREL
+  order               Int               @default(0)
+  parentId            String?
+  parent              Category?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children            Category[]        @relation("CategoryTree")
+  listings            Listing[]         @relation("PrimaryCategory")
+  subcategoryListings Listing[]         @relation("SubCategory")
+  commercialStores    CommercialStore[]
 }
 
 model User {
-  id                    String         @id @default(cuid())
+  id                    String            @id @default(cuid())
   name                  String
-  email                 String         @unique
+  email                 String            @unique
   passwordHash          String
   avatarUrl             String?
   bio                   String?
   whatsappPhone         String?
-  showWhatsappByDefault Boolean        @default(true)
-  role                  String         @default("USER") // USER | ADMIN
+  showWhatsappByDefault Boolean           @default(true)
+  role                  String            @default("USER") // USER | ADMIN
   departmentId          String?
-  department            Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department            Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   cityId                String?
-  city                  City?          @relation(fields: [cityId], references: [id], onDelete: SetNull)
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  city                  City?             @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   listings              Listing[]
+  commercialStores      CommercialStore[]
+  storeInquiries        StoreInquiry[]
   favorites             Favorite[]
   savedSearches         SavedSearch[]
   notifications         Notification[]
-  buyerConversations    Conversation[] @relation("BuyerConversations")
-  sellerConversations   Conversation[] @relation("SellerConversations")
+  buyerConversations    Conversation[]    @relation("BuyerConversations")
+  sellerConversations   Conversation[]    @relation("SellerConversations")
   messages              Message[]
-  reviewsGiven          Review[]       @relation("ReviewAuthor")
-  reviewsReceived       Review[]       @relation("ReviewTarget")
-  reportsFiled          Report[]       @relation("ReportReporter")
+  reviewsGiven          Review[]          @relation("ReviewAuthor")
+  reviewsReceived       Review[]          @relation("ReviewTarget")
+  reportsFiled          Report[]          @relation("ReportReporter")
+}
+
+model CommercialStore {
+  id                  String      @id @default(cuid())
+  slug                String      @unique
+  name                String
+  tagline             String      @default("Tienda Oficial en ReUsa PY")
+  description         String      @default("")
+  ownerId             String
+  owner               User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  categoryId          String?
+  category            Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // Commercial status & plan
+  status              String      @default("PENDING") // PENDING | ACTIVE | PAUSED | EXPIRED
+  planTier            String      @default("BASIC") // BASIC | FEATURED | FLAGSHIP
+  maxProducts         Int         @default(15)
+  monthlyPricePyg     Float       @default(190000)
+  expiresAt           DateTime?
+  slotOrder           Int         @default(100)
+
+  // 3D Visual Branding
+  logoUrl             String?
+  bannerUrl           String?
+  facadeColor         String      @default("#ecfeff")
+  neonColor           String      @default("#00f0ff")
+  secondaryNeon       String      @default("#ff2a9d")
+  npcGreeting         String?
+
+  // Real physical store contact & location
+  departmentId        String?
+  department          Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  cityId              String?
+  city                City?       @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  address             String?
+  openingHours        String?
+  whatsappPhone       String?
+  instagramUrl        String?
+  websiteUrl          String?
+  approxLat           Float?
+  approxLng           Float?
+
+  // Live ROI Analytics
+  visitsCount         Int         @default(0)
+  productClicksCount  Int         @default(0)
+  whatsappClicksCount Int         @default(0)
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  listings            Listing[]
+
+  @@index([status, slotOrder])
+  @@index([ownerId])
+}
+
+model StoreInquiry {
+  id             String   @id @default(cuid())
+  businessName   String
+  contactName    String
+  contactPhone   String
+  contactEmail   String
+  rubro          String
+  cityName       String
+  desiredPlan    String   @default("FEATURED") // BASIC | FEATURED | FLAGSHIP
+  instagramOrWeb String?
+  notes          String?
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status         String   @default("NEW") // NEW | CONTACTED | APPROVED | REJECTED
+  createdAt      DateTime @default(now())
+
+  @@index([status, createdAt])
 }
 
 model Listing {
-  id                   String        @id @default(cuid())
-  slug                 String        @unique
+  id                   String           @id @default(cuid())
+  slug                 String           @unique
   title                String
   description          String
   sellerId             String
-  seller               User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller               User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  storeId              String?
+  store                CommercialStore? @relation(fields: [storeId], references: [id], onDelete: SetNull)
   categoryId           String
-  category             Category      @relation("PrimaryCategory", fields: [categoryId], references: [id])
+  category             Category         @relation("PrimaryCategory", fields: [categoryId], references: [id])
   subcategoryId        String?
-  subcategory          Category?     @relation("SubCategory", fields: [subcategoryId], references: [id])
+  subcategory          Category?        @relation("SubCategory", fields: [subcategoryId], references: [id])
 
-  status               String        @default("ACTIVE") // ACTIVE | RESERVED | SOLD | PAUSED
-  condition            String        @default("VERY_GOOD") // LIKE_NEW | VERY_GOOD | GOOD | WITH_DETAILS | FOR_PARTS
-  isFree               Boolean       @default(false)
-  currency             String        @default("PYG") // PYG | USD
-  price                Float         @default(0)
+  status               String           @default("ACTIVE") // ACTIVE | RESERVED | SOLD | PAUSED
+  condition            String           @default("VERY_GOOD") // BRAND_NEW | OUTLET | LIKE_NEW | VERY_GOOD | GOOD | WITH_DETAILS | FOR_PARTS
+  sku                  String?
+  stockQuantity        Int?
+  isFree               Boolean          @default(false)
+  currency             String           @default("PYG") // PYG | USD
+  price                Float            @default(0)
   previousPrice        Float?
 
   referenceNewPrice    Float?
   referenceNewUrl      String?
   savingsPercent       Int?
 
-  isNegotiable         Boolean       @default(false)
-  acceptsTrade         Boolean       @default(false)
+  isNegotiable         Boolean          @default(false)
+  acceptsTrade         Boolean          @default(false)
 
-  pickupInPerson       Boolean       @default(true)
-  publicMeetup         Boolean       @default(false)
-  localDelivery        Boolean       @default(false)
-  localDeliveryFree    Boolean       @default(false)
-  nationalShipping     Boolean       @default(false)
-  nationalShippingFree Boolean       @default(false)
-  scheduleVisitOnly    Boolean       @default(false)
+  pickupInPerson       Boolean          @default(true)
+  publicMeetup         Boolean          @default(false)
+  localDelivery        Boolean          @default(false)
+  localDeliveryFree    Boolean          @default(false)
+  nationalShipping     Boolean          @default(false)
+  nationalShippingFree Boolean          @default(false)
+  scheduleVisitOnly    Boolean          @default(false)
 
-  showWhatsapp         Boolean       @default(true)
+  showWhatsapp         Boolean          @default(true)
 
   departmentId         String
-  department           Department    @relation(fields: [departmentId], references: [id])
+  department           Department       @relation(fields: [departmentId], references: [id])
   cityId               String
-  city                 City          @relation(fields: [cityId], references: [id])
+  city                 City             @relation(fields: [cityId], references: [id])
   neighborhoodId       String?
-  neighborhood         Neighborhood? @relation(fields: [neighborhoodId], references: [id])
+  neighborhood         Neighborhood?    @relation(fields: [neighborhoodId], references: [id])
   approxLat            Float
   approxLng            Float
 
@@ -150,8 +232,8 @@ model Listing {
   vehicleDocs          String?
 
   // Real estate specific fields
-  realEstateOperation  String?       // SALE | RENT
-  realEstateType       String?       // Casa | Departamento | Terreno | Duplex | Local
+  realEstateOperation  String? // SALE | RENT
+  realEstateType       String? // Casa | Departamento | Terreno | Duplex | Local
   areaTotalM2          Float?
   areaBuiltM2          Float?
   bedrooms             Int?
@@ -165,13 +247,13 @@ model Listing {
   apparelGender        String?
 
   // Future monetization readiness
-  isFeatured           Boolean       @default(false)
+  isFeatured           Boolean          @default(false)
   featuredUntil        DateTime?
 
-  viewsCount           Int           @default(0)
+  viewsCount           Int              @default(0)
   expiresAt            DateTime
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
   images               ListingImage[]
   favorites            Favorite[]
@@ -181,6 +263,7 @@ model Listing {
 
   @@index([status, createdAt])
   @@index([categoryId, status])
+  @@index([storeId, status])
   @@index([departmentId, cityId, status])
   @@index([currency, price])
   @@index([savingsPercent])
@@ -255,7 +338,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // MESSAGE | PRICE_DROP | FAV_STATUS | SAVED_SEARCH | REVIEW | MODERATION
+  type      String // MESSAGE | PRICE_DROP | FAV_STATUS | SAVED_SEARCH | REVIEW | MODERATION
   title     String
   body      String
   linkUrl   String?

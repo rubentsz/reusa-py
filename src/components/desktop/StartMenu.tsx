@@ -12,6 +12,8 @@ import {
   PlusSquare,
   Search,
   Shield,
+  Sparkles,
+  Store,
   User,
 } from "lucide-react";
 import { useApp } from "@/components/AppContext";
@@ -21,6 +23,8 @@ export function StartMenu({ onClose }: { onClose: () => void }) {
   const {
     user,
     categories,
+    commercialStores,
+    myStores,
     logout,
     openExplorerWithFilters,
     openPublish,
@@ -30,6 +34,9 @@ export function StartMenu({ onClose }: { onClose: () => void }) {
     openProfile,
     openAdmin,
     openAuth,
+    openCommercialStore,
+    openRentStore,
+    openMerchantDashboard,
   } = useApp();
 
   const [query, setQuery] = useState("");
@@ -144,6 +151,61 @@ export function StartMenu({ onClose }: { onClose: () => void }) {
             );
           })}
         </div>
+      </div>
+
+      {/* Avenida de Marcas — Commercial Stores */}
+      <div className="border-t border-slate-200/70 bg-gradient-to-r from-fuchsia-50/70 via-white to-cyan-50/70 px-5 py-2.5">
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-[11px] font-bold text-fuchsia-900">
+            <Store className="h-3.5 w-3.5 text-fuchsia-600" />
+            Avenida de Marcas · Tiendas Oficiales
+          </p>
+          <div className="flex items-center gap-1.5">
+            {myStores.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  openMerchantDashboard(myStores[0].id);
+                  onClose();
+                }}
+                className="rounded-md bg-cyan-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-cyan-700"
+              >
+                Mi Tienda
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                openRentStore();
+                onClose();
+              }}
+              className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-amber-600"
+            >
+              <Sparkles className="h-2.5 w-2.5" /> Tu Marca Aquí
+            </button>
+          </div>
+        </div>
+        {commercialStores.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {commercialStores.slice(0, 6).map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  openCommercialStore(st.slug, st.name);
+                  onClose();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-2xs transition hover:border-fuchsia-300 hover:text-fuchsia-700"
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: st.neonColor }}
+                />
+                <span className="max-w-[130px] truncate">{st.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Categories Quick Launch */}

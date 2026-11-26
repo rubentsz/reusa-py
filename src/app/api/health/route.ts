@@ -11,10 +11,11 @@ export async function GET() {
     .sort();
 
   try {
-    const [categories, departments, listings] = await Promise.all([
+    const [categories, departments, listings, commercialStores] = await Promise.all([
       prisma.category.count(),
       prisma.department.count(),
       prisma.listing.count(),
+      prisma.commercialStore.count(),
     ]);
 
     return NextResponse.json({
@@ -22,7 +23,7 @@ export async function GET() {
       dbConfigured: Boolean(url),
       dbSourceKey: sourceKey,
       blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-      counts: { categories, departments, listings },
+      counts: { categories, departments, listings, commercialStores },
     });
   } catch (err) {
     const e = err as { code?: string; name?: string; message?: string };

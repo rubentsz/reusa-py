@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { formatPrice } from "@/lib/format";
-import type { ListingDTO } from "@/types/marketplace";
+import type { CommercialStoreDTO, ListingDTO } from "@/types/marketplace";
 
 export function createBoulevardRoadPBR(): {
   map: THREE.CanvasTexture;
@@ -388,8 +388,19 @@ export function createPriceHologramTexture(
 
   ctx.fillStyle = "#38bdf8";
   ctx.font = "600 20px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
-  const loc = [listing.neighborhood?.name, listing.city.name].filter(Boolean).join(", ");
-  ctx.fillText(`📍 ${loc}  ·  Clic o [E] inspeccionar`, 28, 140, 456);
+  if (listing.store) {
+    const condLabel =
+      listing.condition === "BRAND_NEW"
+        ? "★ NUEVO"
+        : listing.condition === "OUTLET"
+        ? "★ OUTLET"
+        : "★ OFICIAL";
+    const stockStr = listing.stockQuantity != null ? ` · Stock: ${listing.stockQuantity}` : "";
+    ctx.fillText(`${condLabel}${stockStr} · [E] Zoom / Pedido`, 28, 140, 456);
+  } else {
+    const loc = [listing.neighborhood?.name, listing.city.name].filter(Boolean).join(", ");
+    ctx.fillText(`📍 ${loc}  ·  Clic o [E] inspeccionar`, 28, 140, 456);
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -539,5 +550,279 @@ export function createSoftGlowTexture(): THREE.CanvasTexture {
   ctx.fillRect(0, 0, 128, 128);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function createCommercialSignTexture(
+  store: CommercialStoreDTO,
+  productCount: number
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 340;
+  const ctx = canvas.getContext("2d")!;
+
+  const drawFrame = (logoImg?: HTMLImageElement | null) => {
+    const bg = ctx.createLinearGradient(0, 0, 1024, 340);
+    bg.addColorStop(0, "#0b071d");
+    bg.addColorStop(0.6, "#180d35");
+    bg.addColorStop(1, "#0d1f36");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1024, 340);
+
+    // Double glowing neon frame
+    ctx.strokeStyle = store.neonColor;
+    ctx.lineWidth = 12;
+    ctx.shadowColor = store.neonColor;
+    ctx.shadowBlur = 22;
+    ctx.strokeRect(14, 14, 996, 312);
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = store.secondaryNeon;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(28, 28, 968, 284);
+
+    // Left Logo Medallion Box
+    ctx.fillStyle = "#080d1d";
+    ctx.beginPath();
+    ctx.roundRect(48, 52, 236, 236, 28);
+    ctx.fill();
+    ctx.strokeStyle = store.neonColor;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(58, 62, 216, 216, 22);
+      ctx.clip();
+      const aspect = logoImg.naturalWidth / Math.max(1, logoImg.naturalHeight);
+      let dw = 204;
+      let dh = 204;
+      if (aspect > 1) dh = 204 / aspect;
+      else dw = 204 * aspect;
+      ctx.drawImage(logoImg, 166 - dw / 2, 170 - dh / 2, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = store.neonColor;
+      ctx.font = "900 84px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(store.name.slice(0, 2).toUpperCase(), 166, 172);
+    }
+
+    // Verified / Plan tier pill
+    const badgeText =
+      store.planTier === "FLAGSHIP"
+        ? "★ TIENDA FLAGSHIP VIP"
+        : store.planTier === "FEATURED"
+        ? "★ TIENDA OFICIAL DESTACADA"
+        : "★ TIENDA OFICIAL PY";
+    ctx.fillStyle = store.planTier === "FLAGSHIP" ? "#fbbf24" : store.neonColor;
+    ctx.beginPath();
+    ctx.roundRect(312, 48, 360, 40, 12);
+    ctx.fill();
+    ctx.fillStyle = "#0b071d";
+    ctx.font = "900 20px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(badgeText, 492, 69, 344);
+
+    // Store Name
+    ctx.textAlign = "left";
+    ctx.shadowColor = store.neonColor;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 62px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
+    ctx.fillText(store.name.toUpperCase(), 312, 146, 668);
+    ctx.shadowBlur = 0;
+
+    // Tagline
+    ctx.fillStyle = store.secondaryNeon;
+    ctx.font = "700 28px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
+    ctx.fillText(store.tagline || "Catálogo Oficial en ReUsa PY", 312, 214, 668);
+
+    // Bottom status bar
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath();
+    ctx.roundRect(312, 248, 410, 44, 14);
+    ctx.fill();
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "800 23px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
+    ctx.fillText(
+      `${productCount} ${productCount === 1 ? "PRODUCTO EN CATÁLOGO" : "PRODUCTOS EN CATÁLOGO"} · ENTRAR`,
+      332,
+      271,
+      380
+    );
+  };
+
+  drawFrame(null);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+
+  if (store.logoUrl) {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      drawFrame(img);
+      tex.needsUpdate = true;
+    };
+    img.src = store.logoUrl;
+  }
+
+  return tex;
+}
+
+export function createAvailableLotSignTexture(lotLabel: string): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 340;
+  const ctx = canvas.getContext("2d")!;
+
+  const grad = ctx.createLinearGradient(0, 0, 1024, 340);
+  grad.addColorStop(0, "#1c0e38");
+  grad.addColorStop(0.5, "#3b124d");
+  grad.addColorStop(1, "#1c1230");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 340);
+
+  ctx.strokeStyle = "#fbbf24";
+  ctx.lineWidth = 12;
+  ctx.shadowColor = "#fbbf24";
+  ctx.shadowBlur = 20;
+  ctx.strokeRect(14, 14, 996, 312);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#fbbf24";
+  ctx.beginPath();
+  ctx.roundRect(302, 34, 420, 46, 14);
+  ctx.fill();
+  ctx.fillStyle = "#160a28";
+  ctx.font = "900 24px 'Plus Jakarta Sans', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`★ ${lotLabel.toUpperCase()} ★`, 512, 58);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "#ff2a9d";
+  ctx.shadowBlur = 18;
+  ctx.font = "900 66px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText("TU MARCA AQUÍ", 512, 146);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#7dd3fc";
+  ctx.font = "700 30px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText("PONÉ TU LOGO Y CATÁLOGO EN ESTE LOCAL 3D", 512, 214, 920);
+
+  ctx.fillStyle = "#ff2a9d";
+  ctx.beginPath();
+  ctx.roundRect(262, 250, 500, 48, 16);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 24px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText("CLIC O [E] PARA ALQUILAR ESTE LOCAL", 512, 274);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function createAvenidaMarcasArchTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 180;
+  const ctx = canvas.getContext("2d")!;
+
+  const grad = ctx.createLinearGradient(0, 0, 1024, 180);
+  grad.addColorStop(0, "#120726");
+  grad.addColorStop(0.5, "#280f4a");
+  grad.addColorStop(1, "#0d233d");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 180);
+
+  ctx.strokeStyle = "#fbbf24";
+  ctx.lineWidth = 8;
+  ctx.strokeRect(8, 8, 1008, 164);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "#00f0ff";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 54px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText("★ AVENIDA DE MARCAS · REUSA PY ★", 512, 72, 960);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "800 26px 'Plus Jakarta Sans', sans-serif";
+  ctx.fillText("TIENDAS OFICIALES 3D  ·  LOCALES REALES DE PARAGUAY", 512, 130, 960);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function createFloorLogoMedallionTexture(
+  store: CommercialStoreDTO
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+
+  const draw = (logoImg?: HTMLImageElement | null) => {
+    ctx.clearRect(0, 0, 512, 512);
+    ctx.fillStyle = "rgba(12, 8, 28, 0.88)";
+    ctx.beginPath();
+    ctx.arc(256, 256, 240, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = store.neonColor;
+    ctx.lineWidth = 14;
+    ctx.stroke();
+
+    ctx.strokeStyle = store.secondaryNeon;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(256, 256, 214, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(256, 224, 118, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(logoImg, 138, 106, 236, 236);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = store.neonColor;
+      ctx.font = "900 120px 'Plus Jakarta Sans', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(store.name.slice(0, 2).toUpperCase(), 256, 224);
+    }
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 32px 'Plus Jakarta Sans', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(store.name.toUpperCase(), 256, 388, 340);
+  };
+
+  draw(null);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  if (store.logoUrl) {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      draw(img);
+      tex.needsUpdate = true;
+    };
+    img.src = store.logoUrl;
+  }
   return tex;
 }

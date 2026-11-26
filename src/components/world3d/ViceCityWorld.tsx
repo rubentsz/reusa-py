@@ -8,21 +8,27 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import {
   ArrowUp,
+  BadgeCheck,
   Car,
   ChevronLeft,
   ChevronRight,
+  Clock,
   DoorOpen,
   ExternalLink,
   Heart,
   Link2,
+  MapPin,
   Menu,
   MessageCircle,
   Monitor,
   Moon,
+  Phone,
   Plus,
   RotateCcw,
   Search,
+  Settings,
   Shield,
+  ShoppingBag,
   SlidersHorizontal,
   Smartphone,
   Sparkles,
@@ -35,7 +41,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useApp } from "@/components/AppContext";
+import { useApp, type AppWorldModal } from "@/components/AppContext";
 import { STORE_THEMES, getStoreTheme, type StoreTheme } from "@/components/world3d/vicePalette";
 import {
   buildViceExterior,
@@ -62,25 +68,24 @@ import { FavoritesAlertsView } from "@/components/views/FavoritesAlertsView";
 import { ProfileView } from "@/components/views/ProfileView";
 import { AuthView } from "@/components/views/AuthView";
 import { AdminModerationView } from "@/components/views/AdminModerationView";
+import { CommercialStoreView } from "@/components/views/CommercialStoreView";
+import { RentStoreView } from "@/components/views/RentStoreView";
+import { MerchantDashboardView } from "@/components/views/MerchantDashboardView";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { formatPrice } from "@/lib/format";
-import type { ListingDTO } from "@/types/marketplace";
+import { STORE_PLANS } from "@/lib/storePlans";
+import type { CommercialStoreDTO, ListingDTO } from "@/types/marketplace";
 
-export type WorldModal =
-  | { kind: "listing"; slug: string; title?: string }
-  | { kind: "publish"; editId?: string }
-  | { kind: "chat"; conversationId?: string }
-  | { kind: "favorites" }
-  | { kind: "profile"; userId?: string }
-  | { kind: "auth" }
-  | { kind: "admin" }
-  | null;
+export type WorldModal = AppWorldModal;
 
 type PromptState =
   | { kind: "enter_store"; theme: StoreTheme; count: number }
+  | { kind: "enter_commercial"; store: CommercialStoreDTO; count: number }
+  | { kind: "rent_lot"; label: string }
   | { kind: "inspect_listing"; listing: ListingDTO }
-  | { kind: "exit_store"; theme: StoreTheme }
+  | { kind: "exit_store"; label: string }
   | { kind: "publish_here"; categoryName: string }
+  | { kind: "store_info"; store: CommercialStoreDTO }
   | { kind: "talk_npc"; storeName: string }
   | { kind: "use_kiosk" }
   | { kind: "enter_car"; carId: string; carName: string }
@@ -145,14 +150,21 @@ function resolveColliders(pos: THREE.Vector3, colliders: AABB[], radius = 0.55) 
 
 export function ViceCityWorld({
   initialModal = null,
+  initialCommercialStoreSlug,
 }: {
   initialModal?: WorldModal;
+  initialCommercialStoreSlug?: string;
 }) {
   const {
     user,
     categories,
     departments,
     listings,
+    commercialStores,
+    myStores,
+    storeCart,
+    addToStoreCart,
+    trackStoreEvent,
     filters,
     updateFilters,
     resetFilters,
@@ -174,9 +186,12 @@ export function ViceCityWorld({
 
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [activeStoreSlug, setActiveStoreSlug] = useState<string | null>(null);
+  const [activeCommercialSlug, setActiveCommercialSlug] = useState<string | null>(
+    initialCommercialStoreSlug || null
+  );
   const [transitioning, setTransitioning] = useState(false);
   const [prompt, setPrompt] = useState<PromptState>(null);
-  const [radarState, setRadarState] = useState({ x: 0, z: 38, yaw: Math.PI });
+  const [radarState, setRadarState] = useState({ x: 0, z: 62, yaw: Math.PI });
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showKioskPanel, setShowKioskPanel] = useState(false);
@@ -199,6 +214,7 @@ export function ViceCityWorld({
 
   // Refs synced for 60fps loop & reliable keyboard shortcuts
   const activeStoreRef = useRef<string | null>(null);
+  const activeCommercialRef = useRef<string | null>(initialCommercialStoreSlug || null);
   const modalOpenRef = useRef<boolean>(false);
   const worldModalRef = useRef<WorldModal>(worldModal);
   const showKioskRef = useRef<boolean>(false);
@@ -213,13 +229,14 @@ export function ViceCityWorld({
   const mobileSprintRef = useRef<boolean>(false);
   const favoriteIdsRef = useRef<Set<string>>(favoriteIds);
 
-  const playerPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 38));
+  // Spawn right at the VIP entrance of Avenida de Marcas looking North!
+  const playerPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 62));
   const playerVelYRef = useRef<number>(0);
   const playerYawRef = useRef<number>(Math.PI);
   const camYawRef = useRef<number>(0);
   const camPitchRef = useRef<number>(0.24);
   const camDistRef = useRef<number>(8.2);
-  const currentLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.55, 38));
+  const currentLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.55, 62));
   const keysRef = useRef<Set<string>>(new Set());
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [joyVisual, setJoyVisual] = useState<{ x: number; y: number; active: boolean }>({
@@ -281,10 +298,24 @@ export function ViceCityWorld({
     return counts;
   }, [listings]);
 
+  const listingCountByStore = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const l of listings) {
+      if (l.storeId) {
+        counts[l.storeId] = (counts[l.storeId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [listings]);
+
   const listingCountRef = useRef<Record<string, number>>(listingCountByCategory);
+  const storeCountRef = useRef<Record<string, number>>(listingCountByStore);
+  const commercialStoresRef = useRef<CommercialStoreDTO[]>(commercialStores);
   useEffect(() => {
     listingCountRef.current = listingCountByCategory;
-  }, [listingCountByCategory]);
+    storeCountRef.current = listingCountByStore;
+    commercialStoresRef.current = commercialStores;
+  }, [listingCountByCategory, listingCountByStore, commercialStores]);
 
   const topDealListing = useMemo(() => {
     return (
@@ -295,6 +326,20 @@ export function ViceCityWorld({
       null
     );
   }, [listings]);
+
+  const activeCommercialStore = useMemo(
+    () =>
+      activeCommercialSlug
+        ? commercialStores.find((s) => s.slug === activeCommercialSlug) || null
+        : null,
+    [commercialStores, activeCommercialSlug]
+  );
+
+  const activeCommercialCartCount = useMemo(() => {
+    if (!activeCommercialStore) return 0;
+    const items = storeCart[activeCommercialStore.id] ?? [];
+    return items.reduce((acc, i) => acc + i.qty, 0);
+  }, [activeCommercialStore, storeCart]);
 
   const activeCategoryObj = useMemo(
     () => categories.find((c) => c.slug === activeStoreSlug) || null,
@@ -320,24 +365,49 @@ export function ViceCityWorld({
     return all;
   }, [activeCategoryObj, categories]);
 
-  const activeStoreListings = useMemo(() => {
-    if (!activeStoreSlug) return [];
-    return listings.filter((l) => l.category.slug === activeStoreSlug);
-  }, [listings, activeStoreSlug]);
+  const activeShowroomListings = useMemo(() => {
+    if (activeCommercialStore) {
+      return listings.filter((l) => l.storeId === activeCommercialStore.id);
+    }
+    if (activeStoreSlug) {
+      return listings.filter((l) => l.category.slug === activeStoreSlug);
+    }
+    return [];
+  }, [listings, activeStoreSlug, activeCommercialStore]);
 
   const bestStoreDeal = useMemo(() => {
-    if (activeStoreListings.length === 0) return null;
-    const freeOne = activeStoreListings.find((l) => l.isFree);
-    const highestSavings = [...activeStoreListings]
+    if (activeShowroomListings.length === 0) return null;
+    const freeOne = activeShowroomListings.find((l) => l.isFree);
+    const highestSavings = [...activeShowroomListings]
       .filter((l) => (l.savingsPercent ?? 0) > 0)
       .sort((a, b) => (b.savingsPercent ?? 0) - (a.savingsPercent ?? 0))[0];
-    return highestSavings || freeOne || activeStoreListings[0];
-  }, [activeStoreListings]);
+    return highestSavings || freeOne || activeShowroomListings[0];
+  }, [activeShowroomListings]);
 
-  const activeTheme = useMemo(
-    () => (activeStoreSlug ? getStoreTheme(activeStoreSlug) : null),
-    [activeStoreSlug]
-  );
+  const activeTheme = useMemo(() => {
+    if (activeCommercialStore) {
+      const base = getStoreTheme(activeCommercialStore.category?.slug || "tecnologia");
+      return {
+        ...base,
+        viceName: activeCommercialStore.name,
+        tagline: activeCommercialStore.tagline,
+        neonColor: activeCommercialStore.neonColor || base.neonColor,
+        secondaryNeon: activeCommercialStore.secondaryNeon || base.secondaryNeon,
+        facadeColor: activeCommercialStore.facadeColor || base.facadeColor,
+      };
+    }
+    return activeStoreSlug ? getStoreTheme(activeStoreSlug) : null;
+  }, [activeStoreSlug, activeCommercialStore]);
+
+  const isInsideAnyStore = Boolean(activeStoreSlug || activeCommercialSlug);
+
+  // Track visit when arriving directly via /tienda/[slug]
+  useEffect(() => {
+    if (initialCommercialStoreSlug) {
+      trackStoreEvent(initialCommercialStoreSlug, "visit");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyEnvironmentToScene = useCallback((mode: TimeOfDay) => {
     const renderer = rendererRef.current;
@@ -355,7 +425,7 @@ export function ViceCityWorld({
     scene.environment = envRT.texture;
     renderer.toneMappingExposure = cfg.exposure;
 
-    if (!activeStoreRef.current) {
+    if (!activeStoreRef.current && !activeCommercialRef.current) {
       scene.background = new THREE.Color(cfg.bgColor);
       scene.fog = new THREE.FogExp2(cfg.fogColor, cfg.fogDensity);
     }
@@ -400,20 +470,26 @@ export function ViceCityWorld({
     cam.lookAt(currentLookAtRef.current);
   }, []);
 
-  const openStandInspection = useCallback((listing: ListingDTO) => {
-    const coverIdx = Math.max(
-      0,
-      listing.images.findIndex((i) => i.isCover)
-    );
-    const spot = interiorRef.current?.productSpots.find((s) => s.listing.id === listing.id);
-    if (spot) {
-      spot.setPhotoIndex(coverIdx);
-    }
-    const next = { listing, photoIdx: coverIdx };
-    inspectedSpotRef.current = next;
-    setInspectedSpot(next);
-    audioRef.current?.playClick();
-  }, []);
+  const openStandInspection = useCallback(
+    (listing: ListingDTO) => {
+      const coverIdx = Math.max(
+        0,
+        listing.images.findIndex((i) => i.isCover)
+      );
+      const spot = interiorRef.current?.productSpots.find((s) => s.listing.id === listing.id);
+      if (spot) {
+        spot.setPhotoIndex(coverIdx);
+      }
+      if (listing.storeId) {
+        trackStoreEvent(listing.storeId, "product_click");
+      }
+      const next = { listing, photoIdx: coverIdx };
+      inspectedSpotRef.current = next;
+      setInspectedSpot(next);
+      audioRef.current?.playClick();
+    },
+    [trackStoreEvent]
+  );
 
   const closeStandInspection = useCallback(() => {
     inspectedSpotRef.current = null;
@@ -509,7 +585,7 @@ export function ViceCityWorld({
 
   const enterCar = useCallback(
     (carId: string) => {
-      if (activeStoreRef.current || !exteriorRef.current) return;
+      if (activeStoreRef.current || activeCommercialRef.current || !exteriorRef.current) return;
       const car = exteriorRef.current.cars.find((c) => c.id === carId);
       if (!car) return;
       drivenCarIdRef.current = car.id;
@@ -543,7 +619,7 @@ export function ViceCityWorld({
 
   const enterStore = useCallback(
     (categorySlug: string) => {
-      if (activeStoreRef.current === categorySlug) return;
+      if (activeStoreRef.current === categorySlug && !activeCommercialRef.current) return;
       if (drivenCarIdRef.current) exitCar();
       audioRef.current?.playDoorChime();
       setTransitioning(true);
@@ -554,6 +630,8 @@ export function ViceCityWorld({
       inspectedSpotRef.current = null;
       setInspectedSpot(null);
       setTimeout(() => {
+        activeCommercialRef.current = null;
+        setActiveCommercialSlug(null);
         activeStoreRef.current = categorySlug;
         setActiveStoreSlug(categorySlug);
         doorCooldownRef.current = performance.now() + 1400;
@@ -563,23 +641,70 @@ export function ViceCityWorld({
     [exitCar]
   );
 
+  const enterCommercialStore = useCallback(
+    (storeSlug: string) => {
+      if (activeCommercialRef.current === storeSlug) return;
+      if (drivenCarIdRef.current) exitCar();
+      audioRef.current?.playDoorChime();
+      trackStoreEvent(storeSlug, "visit");
+      setTransitioning(true);
+      setShowStoreMenu(false);
+      setShowMobileMenu(false);
+      setShowKioskPanel(false);
+      setShowNpcPanel(false);
+      inspectedSpotRef.current = null;
+      setInspectedSpot(null);
+      setTimeout(() => {
+        activeStoreRef.current = null;
+        setActiveStoreSlug(null);
+        activeCommercialRef.current = storeSlug;
+        setActiveCommercialSlug(storeSlug);
+        doorCooldownRef.current = performance.now() + 1400;
+        setTimeout(() => setTransitioning(false), 180);
+      }, 150);
+    },
+    [exitCar, trackStoreEvent]
+  );
+
   const exitStore = useCallback(() => {
-    const prevSlug = activeStoreRef.current;
-    if (!prevSlug) return;
-    const theme = getStoreTheme(prevSlug);
+    const prevCatSlug = activeStoreRef.current;
+    const prevCommSlug = activeCommercialRef.current;
+    if (!prevCatSlug && !prevCommSlug) return;
+
     audioRef.current?.playDoorChime();
     setTransitioning(true);
     setShowKioskPanel(false);
     setShowNpcPanel(false);
     inspectedSpotRef.current = null;
     setInspectedSpot(null);
+
     setTimeout(() => {
       activeStoreRef.current = null;
+      activeCommercialRef.current = null;
       setActiveStoreSlug(null);
-      playerPosRef.current.set(theme.spawnExitX, 0, theme.spawnExitZ);
+      setActiveCommercialSlug(null);
+
+      if (prevCommSlug && exteriorRef.current) {
+        const trg = exteriorRef.current.commercialDoorTriggers.find(
+          (t) => t.store.slug === prevCommSlug
+        );
+        if (trg) {
+          playerPosRef.current.set(trg.spawnExitX, 0, trg.spawnExitZ);
+          playerYawRef.current = trg.side === "west" ? Math.PI / 2 : -Math.PI / 2;
+          camYawRef.current = trg.side === "west" ? -Math.PI / 2 : Math.PI / 2;
+        } else {
+          playerPosRef.current.set(0, 0, 62);
+          playerYawRef.current = Math.PI;
+          camYawRef.current = 0;
+        }
+      } else if (prevCatSlug) {
+        const theme = getStoreTheme(prevCatSlug);
+        playerPosRef.current.set(theme.spawnExitX, 0, theme.spawnExitZ);
+        playerYawRef.current = theme.side === "west" ? Math.PI / 2 : -Math.PI / 2;
+        camYawRef.current = theme.side === "west" ? -Math.PI / 2 : Math.PI / 2;
+      }
+
       playerVelYRef.current = 0;
-      playerYawRef.current = theme.side === "west" ? Math.PI / 2 : -Math.PI / 2;
-      camYawRef.current = theme.side === "west" ? -Math.PI / 2 : Math.PI / 2;
       doorCooldownRef.current = performance.now() + 1800;
       snapCameraBehindPlayer(false);
       setTimeout(() => setTransitioning(false), 180);
@@ -591,12 +716,22 @@ export function ViceCityWorld({
     if (!p) return;
     if (p.kind === "enter_store") {
       enterStore(p.theme.categorySlug);
+    } else if (p.kind === "enter_commercial") {
+      enterCommercialStore(p.store.slug);
+    } else if (p.kind === "rent_lot") {
+      setWorldModal({ kind: "rentStore" });
     } else if (p.kind === "exit_store") {
       exitStore();
     } else if (p.kind === "inspect_listing") {
       openStandInspection(p.listing);
     } else if (p.kind === "publish_here") {
       setWorldModal({ kind: "publish" });
+    } else if (p.kind === "store_info") {
+      setWorldModal({
+        kind: "commercialStore",
+        slug: p.store.slug,
+        title: p.store.name,
+      });
     } else if (p.kind === "talk_npc") {
       setShowNpcPanel(true);
     } else if (p.kind === "use_kiosk") {
@@ -604,7 +739,7 @@ export function ViceCityWorld({
     } else if (p.kind === "enter_car") {
       enterCar(p.carId);
     }
-  }, [enterCar, enterStore, exitStore, openStandInspection, setWorldModal]);
+  }, [enterCar, enterCommercialStore, enterStore, exitStore, openStandInspection, setWorldModal]);
 
   const rebuildExteriorInScene = useCallback(() => {
     const scene = sceneRef.current;
@@ -615,15 +750,17 @@ export function ViceCityWorld({
     const ext = buildViceExterior(
       listingCountByCategory,
       topDealListing,
-      skyTextureRef.current || undefined
+      skyTextureRef.current || undefined,
+      commercialStores,
+      listingCountByStore
     );
     if (skyTextureRef.current) {
       ext.applyTimeOfDay(timeOfDayRef.current, skyTextureRef.current);
     }
-    ext.group.visible = !activeStoreRef.current;
+    ext.group.visible = !activeStoreRef.current && !activeCommercialRef.current;
     exteriorRef.current = ext;
     scene.add(ext.group);
-  }, [listingCountByCategory, topDealListing]);
+  }, [listingCountByCategory, topDealListing, commercialStores, listingCountByStore]);
 
   const rebuildInteriorInScene = useCallback(() => {
     const scene = sceneRef.current;
@@ -633,7 +770,39 @@ export function ViceCityWorld({
       interiorRef.current = null;
     }
 
-    if (activeStoreSlug) {
+    if (activeCommercialStore) {
+      const baseTheme = getStoreTheme(activeCommercialStore.category?.slug || "tecnologia");
+      const themed: StoreTheme = {
+        ...baseTheme,
+        viceName: activeCommercialStore.name,
+        tagline: activeCommercialStore.tagline,
+        neonColor: activeCommercialStore.neonColor || baseTheme.neonColor,
+        secondaryNeon: activeCommercialStore.secondaryNeon || baseTheme.secondaryNeon,
+        facadeColor: activeCommercialStore.facadeColor || baseTheme.facadeColor,
+      };
+      const storeListings = listings.filter((l) => l.storeId === activeCommercialStore.id);
+      const interior = buildStoreInterior(
+        themed,
+        activeCommercialStore.name,
+        storeListings,
+        favoriteIdsRef.current,
+        activeCommercialStore
+      );
+      interiorRef.current = interior;
+      scene.add(interior.group);
+
+      if (exteriorRef.current) exteriorRef.current.group.visible = false;
+      if (exteriorLightsRef.current) exteriorLightsRef.current.visible = false;
+      scene.background = new THREE.Color(0x0f081e);
+      scene.fog = new THREE.FogExp2(0x140c24, 0.014);
+
+      playerPosRef.current.copy(interior.spawnPos);
+      playerVelYRef.current = 0;
+      playerYawRef.current = Math.PI;
+      camYawRef.current = 0;
+      camPitchRef.current = 0.24;
+      snapCameraBehindPlayer(true);
+    } else if (activeStoreSlug) {
       const theme = getStoreTheme(activeStoreSlug);
       const catName =
         categories.find((c) => c.slug === activeStoreSlug)?.name || theme.viceName;
@@ -660,7 +829,7 @@ export function ViceCityWorld({
       scene.background = new THREE.Color(cfg.bgColor);
       scene.fog = new THREE.FogExp2(cfg.fogColor, cfg.fogDensity);
     }
-  }, [activeStoreSlug, categories, listings, snapCameraBehindPlayer]);
+  }, [activeStoreSlug, activeCommercialStore, categories, listings, snapCameraBehindPlayer]);
 
   // Live Time-of-Day updates after initial mount
   useEffect(() => {
@@ -721,7 +890,7 @@ export function ViceCityWorld({
     const hInit = Math.max(1, container.clientHeight);
     const aspect = wInit / hInit;
     const isPortraitInit = aspect < 0.85;
-    const camera = new THREE.PerspectiveCamera(isPortraitInit ? 68 : 56, aspect, 0.1, 480);
+    const camera = new THREE.PerspectiveCamera(isPortraitInit ? 68 : 56, aspect, 0.1, 520);
     cameraRef.current = camera;
 
     const initDpr =
@@ -744,17 +913,11 @@ export function ViceCityWorld({
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Selective UnrealBloom Post-Processing Pipeline (used when quality === "ultra")
     const composer = new EffectComposer(renderer);
     composer.setPixelRatio(initDpr);
     composer.setSize(wInit, hInit);
     const renderPass = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(wInit, hInit),
-      0.2,
-      0.35,
-      0.94
-    );
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(wInit, hInit), 0.2, 0.35, 0.94);
     const outputPass = new OutputPass();
     composer.addPass(renderPass);
     composer.addPass(bloomPass);
@@ -762,7 +925,6 @@ export function ViceCityWorld({
     composerRef.current = composer;
     bloomPassRef.current = bloomPass;
 
-    // Exterior Light Rig (dynamically driven by TIME_PRESETS)
     const extLights = new THREE.Group();
     const hemi = new THREE.HemisphereLight(
       initialCfg.hemiSky,
@@ -778,10 +940,10 @@ export function ViceCityWorld({
     sunLight.shadow.mapSize.set(1024, 1024);
     sunLight.shadow.camera.left = -45;
     sunLight.shadow.camera.right = 45;
-    sunLight.shadow.camera.top = 75;
-    sunLight.shadow.camera.bottom = -75;
+    sunLight.shadow.camera.top = 95;
+    sunLight.shadow.camera.bottom = -95;
     sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 230;
+    sunLight.shadow.camera.far = 260;
     sunLight.shadow.bias = -0.0005;
     extLights.add(sunLight);
     sunLightRef.current = sunLight;
@@ -794,7 +956,6 @@ export function ViceCityWorld({
     scene.add(extLights);
     exteriorLightsRef.current = extLights;
 
-    // Build initial PMREM PBR reflections & sky texture
     const { envRT, skyTexture } = buildPmremEnvironment(renderer, timeOfDayRef.current);
     envRTRef.current = envRT;
     skyTextureRef.current = skyTexture;
@@ -806,12 +967,17 @@ export function ViceCityWorld({
     scene.add(player.group);
     playerRigRef.current = player;
 
-    const ext = buildViceExterior(listingCountRef.current, topDealListing, skyTexture);
+    const ext = buildViceExterior(
+      listingCountRef.current,
+      topDealListing,
+      skyTexture,
+      commercialStoresRef.current,
+      storeCountRef.current
+    );
     ext.applyTimeOfDay(timeOfDayRef.current, skyTexture);
     exteriorRef.current = ext;
     scene.add(ext.group);
 
-    // Position camera immediately on frame 1 (critical for crisp mobile portrait framing!)
     snapCameraBehindPlayer(false);
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -829,13 +995,12 @@ export function ViceCityWorld({
         else if (showKioskRef.current) setShowKioskPanel(false);
         else if (showNpcRef.current) setShowNpcPanel(false);
         else if (drivenCarIdRef.current) exitCar();
-        else if (activeStoreRef.current) exitStore();
+        else if (activeStoreRef.current || activeCommercialRef.current) exitStore();
         return;
       }
 
       if (isTyping) return;
 
-      // Flip 3D product photos with ArrowLeft / ArrowRight during cinematic inspection
       if (inspectedSpotRef.current && !worldModalRef.current) {
         if (e.key === "ArrowLeft") {
           e.preventDefault();
@@ -926,7 +1091,8 @@ export function ViceCityWorld({
         pointerNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(pointerNdc, camera);
 
-        const targets = activeStoreRef.current
+        const inside = Boolean(activeStoreRef.current || activeCommercialRef.current);
+        const targets = inside
           ? interiorRef.current?.clickableMeshes || []
           : exteriorRef.current?.clickableMeshes || [];
 
@@ -935,8 +1101,19 @@ export function ViceCityWorld({
           const ud = hits[0].object.userData;
           if (ud?.type === "store" && ud.categorySlug) {
             enterStore(ud.categorySlug);
+          } else if (ud?.type === "commercial_store" && ud.storeSlug) {
+            enterCommercialStore(ud.storeSlug);
+          } else if (ud?.type === "rent_store") {
+            setWorldModal({ kind: "rentStore" });
+          } else if (ud?.type === "store_info" && ud.storeSlug) {
+            const st = commercialStoresRef.current.find((s) => s.slug === ud.storeSlug);
+            setWorldModal({
+              kind: "commercialStore",
+              slug: ud.storeSlug,
+              title: st?.name || "Tienda Oficial",
+            });
           } else if (ud?.type === "listing" && ud.listing) {
-            if (activeStoreRef.current) {
+            if (inside) {
               openStandInspection(ud.listing);
             } else {
               setWorldModal({
@@ -1015,11 +1192,11 @@ export function ViceCityWorld({
         }
       }
 
-      const isInside = Boolean(activeStoreRef.current);
+      const isInside = Boolean(activeStoreRef.current || activeCommercialRef.current);
       let activeDrivenCar: DrivableCar | null = null;
       let currentSpeedForAudio = 0;
 
-      // 1. DRIVING PHYSICS MODE (GTA Vice City cruising!)
+      // 1. DRIVING PHYSICS MODE
       if (!isInside && drivenCarIdRef.current && exteriorRef.current) {
         activeDrivenCar =
           exteriorRef.current.cars.find((c) => c.id === drivenCarIdRef.current) || null;
@@ -1125,6 +1302,10 @@ export function ViceCityWorld({
           resolveColliders(playerPosRef.current, interiorRef.current.colliders);
           interiorRef.current.update(elapsed, playerPosRef.current, favoriteIdsRef.current);
 
+          const curCommStore = activeCommercialRef.current
+            ? commercialStoresRef.current.find((s) => s.slug === activeCommercialRef.current) || null
+            : null;
+
           let nextPrompt: PromptState = null;
           const exitDist = Math.hypot(
             playerPosRef.current.x - interiorRef.current.exitSpot.x,
@@ -1146,20 +1327,29 @@ export function ViceCityWorld({
           if (exitDist < 1.35 && now > doorCooldownRef.current && !inspectedSpotRef.current) {
             exitStore();
           } else if (exitDist < 2.5) {
-            nextPrompt = { kind: "exit_store", theme: getStoreTheme(activeStoreRef.current!) };
+            nextPrompt = {
+              kind: "exit_store",
+              label: curCommStore ? "Avenida de Marcas" : "Ocean Boulevard",
+            };
           } else if (npcDist < 2.5) {
             nextPrompt = {
               kind: "talk_npc",
-              storeName: getStoreTheme(activeStoreRef.current!).viceName,
+              storeName:
+                curCommStore?.name ||
+                (activeStoreRef.current ? getStoreTheme(activeStoreRef.current).viceName : "la tienda"),
             };
           } else if (kioskDist < 2.5) {
             nextPrompt = { kind: "use_kiosk" };
           } else if (pubDist < 2.5) {
-            nextPrompt = {
-              kind: "publish_here",
-              categoryName:
-                categories.find((c) => c.slug === activeStoreRef.current)?.name || "esta tienda",
-            };
+            if (curCommStore) {
+              nextPrompt = { kind: "store_info", store: curCommStore };
+            } else {
+              nextPrompt = {
+                kind: "publish_here",
+                categoryName:
+                  categories.find((c) => c.slug === activeStoreRef.current)?.name || "esta tienda",
+              };
+            }
           } else {
             let closestDist = 3.2;
             for (const spot of interiorRef.current.productSpots) {
@@ -1174,13 +1364,13 @@ export function ViceCityWorld({
             }
           }
 
-          const prevKey =
-            promptRef.current?.kind === "inspect_listing"
-              ? promptRef.current.listing.id
-              : promptRef.current?.kind;
-          const nextKey =
-            nextPrompt?.kind === "inspect_listing" ? nextPrompt.listing.id : nextPrompt?.kind;
-          if (prevKey !== nextKey) {
+          const promptKeyIn = (p: PromptState) =>
+            p?.kind === "inspect_listing"
+              ? `l:${p.listing.id}`
+              : p?.kind === "store_info"
+              ? `si:${p.store.id}`
+              : p?.kind;
+          if (promptKeyIn(promptRef.current) !== promptKeyIn(nextPrompt)) {
             promptRef.current = nextPrompt;
             setPrompt(nextPrompt);
           }
@@ -1212,20 +1402,51 @@ export function ViceCityWorld({
           }
 
           let nextPrompt: PromptState = null;
-          for (const trg of exteriorRef.current.doorTriggers) {
+
+          // Check Commercial Brand Storefronts first
+          for (const trg of exteriorRef.current.commercialDoorTriggers) {
             const d = Math.hypot(playerPosRef.current.x - trg.x, playerPosRef.current.z - trg.z);
-            if (d < 1.3 && now > doorCooldownRef.current) {
-              enterStore(trg.theme.categorySlug);
+            if (d < 1.35 && now > doorCooldownRef.current) {
+              enterCommercialStore(trg.store.slug);
               break;
             }
-            if (d < 3.6) {
+            if (d < 3.8) {
               nextPrompt = {
-                kind: "enter_store",
-                theme: trg.theme,
-                count: listingCountRef.current[trg.theme.categorySlug] ?? 0,
+                kind: "enter_commercial",
+                store: trg.store,
+                count: storeCountRef.current[trg.store.id] ?? trg.store.activeListingsCount ?? 0,
               };
             }
           }
+
+          // Check Vacant "LOCAL DISPONIBLE" rental lots
+          if (!nextPrompt) {
+            for (const lot of exteriorRef.current.vacantLotTriggers) {
+              const d = Math.hypot(playerPosRef.current.x - lot.x, playerPosRef.current.z - lot.z);
+              if (d < 3.8) {
+                nextPrompt = { kind: "rent_lot", label: lot.label };
+              }
+            }
+          }
+
+          // Check 10 Community Secondhand Category Storefronts
+          if (!nextPrompt) {
+            for (const trg of exteriorRef.current.doorTriggers) {
+              const d = Math.hypot(playerPosRef.current.x - trg.x, playerPosRef.current.z - trg.z);
+              if (d < 1.3 && now > doorCooldownRef.current) {
+                enterStore(trg.theme.categorySlug);
+                break;
+              }
+              if (d < 3.6) {
+                nextPrompt = {
+                  kind: "enter_store",
+                  theme: trg.theme,
+                  count: listingCountRef.current[trg.theme.categorySlug] ?? 0,
+                };
+              }
+            }
+          }
+
           if (!nextPrompt && closestCar) {
             nextPrompt = { kind: "enter_car", carId: closestCar.id, carName: closestCar.name };
           }
@@ -1233,6 +1454,10 @@ export function ViceCityWorld({
           const promptKey = (p: PromptState) =>
             p?.kind === "enter_store"
               ? `s:${p.theme.categorySlug}`
+              : p?.kind === "enter_commercial"
+              ? `cs:${p.store.slug}`
+              : p?.kind === "rent_lot"
+              ? `rl:${p.label}`
               : p?.kind === "enter_car"
               ? `c:${p.carId}`
               : p?.kind;
@@ -1247,7 +1472,7 @@ export function ViceCityWorld({
         player.animate(dt, playerPosRef.current.y > 0.05 ? 0 : currentSpeedForAudio, isSprinting);
       }
 
-      // 3. CONTINUOUS AMBIENT AUDIO ENGINE (ocean surf, V8 engine, soft footsteps)
+      // 3. CONTINUOUS AMBIENT AUDIO ENGINE
       audioRef.current?.updateContinuous({
         time: elapsed,
         playerZ: playerPosRef.current.z,
@@ -1315,7 +1540,6 @@ export function ViceCityWorld({
         camera.lookAt(currentLookAtRef.current);
       }
 
-      // Render with UnrealBloom when Ultra, or direct PBR renderer when Balanced/Fast
       if (qualityRef.current === "ultra" && composerRef.current) {
         composerRef.current.render();
       } else {
@@ -1410,6 +1634,12 @@ export function ViceCityWorld({
     worldModal || showKioskPanel || showNpcPanel || inspectedSpot
   );
 
+  // Dynamic radar normalization across full Ocean Boulevard + Avenida de Marcas
+  const radarMinZ = -70;
+  const radarMaxZ = 52 + Math.ceil((commercialStores.length + 2) / 2) * 20 + 12;
+  const mapZToRadarPct = (zVal: number) =>
+    Math.max(10, Math.min(90, 14 + ((zVal - radarMinZ) / Math.max(1, radarMaxZ - radarMinZ)) * 76));
+
   return (
     <div className="relative h-dvh w-screen overflow-hidden bg-[#140b29] select-none">
       {/* Three.js Fullscreen Canvas */}
@@ -1435,7 +1665,7 @@ export function ViceCityWorld({
                 REUSA VICE
               </span>
               <span className="hidden text-[9px] font-semibold tracking-wider text-cyan-200/80 md:block">
-                DEFINITIVE 3D · PYG / USD
+                AVENIDA DE MARCAS · 3D
               </span>
             </div>
           </div>
@@ -1477,10 +1707,31 @@ export function ViceCityWorld({
             <SlidersHorizontal className="h-3.5 w-3.5" />
             <span>Filtrar PY</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setWorldModal({ kind: "rentStore" })}
+            className="hidden items-center gap-1 rounded-xl border border-amber-400/60 bg-amber-500/20 px-2.5 py-2 text-xs font-extrabold text-amber-200 shadow-lg backdrop-blur-md transition hover:bg-amber-500/35 hover:text-white lg:inline-flex"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>Tu Marca Aquí</span>
+          </button>
         </div>
 
         {/* RIGHT CLUSTER */}
         <div className="pointer-events-auto flex items-center gap-1.5">
+          {myStores.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setWorldModal({ kind: "merchantDashboard" })}
+              className="hidden items-center gap-1.5 rounded-xl border border-amber-400/70 bg-amber-400 px-2.5 py-2 text-xs font-black text-slate-950 shadow-lg transition hover:bg-amber-300 md:inline-flex"
+              title="Gestionar logo y catálogo de tu Tienda Oficial"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              <span>Mi Tienda</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setWorldModal(user ? { kind: "publish" } : { kind: "auth" })}
@@ -1523,7 +1774,7 @@ export function ViceCityWorld({
               type="button"
               onClick={() => setWorldModal({ kind: "admin" })}
               className="hidden h-9 w-9 items-center justify-center rounded-xl border border-amber-400/50 bg-[#120926]/85 text-amber-300 shadow-lg backdrop-blur-md hover:bg-amber-500/20 md:flex"
-              title="Moderación"
+              title="Administración y Tiendas"
             >
               <Shield className="h-4 w-4" />
             </button>
@@ -1614,16 +1865,25 @@ export function ViceCityWorld({
         </button>
       </div>
 
-      {/* SECOND ROW: Clean Centered Zone / Speedometer Pill (Mobile center / Desktop top-right) */}
+      {/* SECOND ROW: Clean Centered Zone / Speedometer / Brand Showroom Pill */}
       <div className="pointer-events-none fixed inset-x-3 top-[54px] z-20 flex justify-center md:inset-x-auto md:right-3.5 md:top-[58px] md:justify-end">
-        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/15 bg-[#120926]/80 px-3.5 py-1 text-white shadow-md backdrop-blur-md">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/15 bg-[#120926]/82 px-3 py-1 text-white shadow-md backdrop-blur-md">
+          {activeCommercialStore?.logoUrl && (
+            <img
+              src={activeCommercialStore.logoUrl}
+              alt=""
+              className="h-4 w-4 rounded object-contain"
+            />
+          )}
           <span
-            className="text-[11px] font-black italic tracking-wide md:text-xs"
+            className="max-w-[165px] truncate text-[11px] font-black italic tracking-wide sm:max-w-none md:text-xs"
             style={{
               color: drivingCar
                 ? "#ffd166"
                 : activeTheme
                 ? activeTheme.neonColor
+                : radarState.z > 42
+                ? "#fbbf24"
                 : "#00f0ff",
             }}
           >
@@ -1631,20 +1891,40 @@ export function ViceCityWorld({
               ? `${drivingCar.name} · ${drivingCar.kmh} km/h`
               : activeTheme
               ? activeTheme.viceName
+              : radarState.z > 42
+              ? "AVENIDA DE MARCAS PY"
               : "OCEAN BOULEVARD PY"}
           </span>
           <span className="text-[10px] font-semibold text-pink-200/90">
             {drivingCar
               ? "Conduciendo"
-              : activeTheme
-              ? `· ${activeStoreListings.length} avisos`
+              : isInsideAnyStore
+              ? `· ${activeShowroomListings.length} prod.`
               : `· ${listings.length} avisos`}
           </span>
-          {activeStoreSlug && (
+
+          {activeCommercialStore && (
+            <button
+              type="button"
+              onClick={() =>
+                setWorldModal({
+                  kind: "commercialStore",
+                  slug: activeCommercialStore.slug,
+                  title: activeCommercialStore.name,
+                })
+              }
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black text-slate-950 hover:bg-emerald-400"
+            >
+              <ShoppingBag className="h-3 w-3" />
+              {activeCommercialCartCount > 0 ? `Pedido (${activeCommercialCartCount})` : "Catálogo"}
+            </button>
+          )}
+
+          {isInsideAnyStore && (
             <button
               type="button"
               onClick={exitStore}
-              className="ml-1 inline-flex items-center gap-1 rounded-full bg-[#ff2a9d] px-2 py-0.5 text-[10px] font-extrabold text-white"
+              className="inline-flex items-center gap-1 rounded-full bg-[#ff2a9d] px-2 py-0.5 text-[10px] font-extrabold text-white"
             >
               <DoorOpen className="h-3 w-3" /> Salir
             </button>
@@ -1652,7 +1932,7 @@ export function ViceCityWorld({
         </div>
       </div>
 
-      {/* MOBILE COMPACT TAPPABLE MINI-RADAR (Zero overlap: sits cleanly below zone pill on top-left) */}
+      {/* MOBILE COMPACT TAPPABLE MINI-RADAR */}
       {isMobileViewport && !anyOverlayOpen && !showStoreMenu && !showMobileMenu && (
         <button
           type="button"
@@ -1663,33 +1943,45 @@ export function ViceCityWorld({
           <div className="absolute inset-x-0 top-0 h-2.5 bg-cyan-500/50" />
           <div className="absolute left-1/2 top-0 h-3 w-1.5 -translate-x-1/2 bg-amber-600/80" />
           <div className="absolute bottom-0 left-1/2 top-2.5 w-2 -translate-x-1/2 bg-slate-700/85" />
-          {!activeStoreSlug &&
-            STORE_THEMES.map((t) => {
-              const leftPct = 50 + (t.x / 24) * 34;
-              const topPct = 54 + ((t.z + 10) / 76) * 40;
+          {!isInsideAnyStore &&
+            STORE_THEMES.map((t) => (
+              <span
+                key={t.categorySlug}
+                style={{
+                  left: `${50 + (t.x / 24) * 34}%`,
+                  top: `${mapZToRadarPct(t.z)}%`,
+                  backgroundColor: t.neonColor,
+                }}
+                className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+              />
+            ))}
+          {!isInsideAnyStore &&
+            commercialStores.map((cs, idx) => {
+              const bx = idx % 2 === 0 ? -17.5 : 17.5;
+              const bz = 52 + Math.floor(idx / 2) * 20;
               return (
                 <span
-                  key={t.categorySlug}
+                  key={cs.id}
                   style={{
-                    left: `${leftPct}%`,
-                    top: `${topPct}%`,
-                    backgroundColor: t.neonColor,
+                    left: `${50 + (bx / 24) * 34}%`,
+                    top: `${mapZToRadarPct(bz)}%`,
+                    backgroundColor: "#fbbf24",
                   }}
-                  className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm ring-1 ring-white"
                 />
               );
             })}
           <div
             style={{
               left: `${
-                activeStoreSlug
+                isInsideAnyStore
                   ? 50 + (radarState.x / 12) * 35
                   : 50 + (radarState.x / 24) * 34
               }%`,
               top: `${
-                activeStoreSlug
+                isInsideAnyStore
                   ? 50 + (radarState.z / 16) * 35
-                  : Math.max(12, Math.min(88, 54 + ((radarState.z + 10) / 76) * 40))
+                  : mapZToRadarPct(radarState.z)
               }%`,
               transform: `translate(-50%, -50%) rotate(${-radarState.yaw + Math.PI}rad)`,
             }}
@@ -1698,10 +1990,9 @@ export function ViceCityWorld({
         </button>
       )}
 
-      {/* MOBILE CLEAN SLIDE-DOWN MENU (☰) — Includes Horario, Calidad & Sonido */}
+      {/* MOBILE CLEAN SLIDE-DOWN MENU (☰) */}
       {showMobileMenu && (
-        <div className="fixed right-2.5 top-[54px] z-30 w-64 overflow-hidden rounded-2xl border border-cyan-400/40 bg-[#120926]/95 p-2.5 text-white shadow-2xl backdrop-blur-xl md:hidden">
-          {/* Realism Quick Controls */}
+        <div className="fluent-scroll fixed right-2.5 top-[54px] z-30 max-h-[75dvh] w-64 overflow-y-auto rounded-2xl border border-cyan-400/40 bg-[#120926]/95 p-2.5 text-white shadow-2xl backdrop-blur-xl md:hidden">
           <div className="mb-2 space-y-2 border-b border-white/10 pb-2.5">
             <div>
               <span className="mb-1 block px-1 text-[10px] font-extrabold uppercase tracking-wider text-cyan-300">
@@ -1770,6 +2061,30 @@ export function ViceCityWorld({
           </div>
 
           <div className="space-y-1 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileMenu(false);
+                setWorldModal({ kind: "rentStore" });
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl bg-amber-500/20 px-3 py-2.5 text-amber-200"
+            >
+              <Sparkles className="h-4 w-4" /> Alquilá tu Local 3D (Tu Marca)
+            </button>
+
+            {myStores.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  setWorldModal({ kind: "merchantDashboard" });
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl bg-amber-400 px-3 py-2.5 font-black text-slate-950"
+              >
+                <Settings className="h-4 w-4" /> Gestionar Mi Tienda Oficial
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => {
@@ -1844,19 +2159,19 @@ export function ViceCityWorld({
                 }}
                 className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-amber-300 hover:bg-white/10"
               >
-                <Shield className="h-4 w-4" /> Panel de Moderación
+                <Shield className="h-4 w-4" /> Panel Admin y Locales
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* QUICK TELEPORT STORES DRAWER */}
+      {/* QUICK TELEPORT STORES DRAWER (Commercial Brands + 10 Community Stores) */}
       {showStoreMenu && (
-        <div className="fluent-scroll fixed left-2.5 top-[92px] z-30 max-h-[58dvh] w-72 max-w-[calc(100vw-20px)] overflow-y-auto rounded-2xl border border-[#ff4fd8]/40 bg-[#120926]/95 p-2.5 text-white shadow-2xl backdrop-blur-xl md:left-3.5 md:top-[98px]">
+        <div className="fluent-scroll fixed left-2.5 top-[92px] z-30 max-h-[64dvh] w-80 max-w-[calc(100vw-20px)] overflow-y-auto rounded-2xl border border-[#ff4fd8]/40 bg-[#120926]/95 p-3 text-white shadow-2xl backdrop-blur-xl md:left-3.5 md:top-[98px]">
           <div className="mb-2 flex items-center justify-between px-1">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-pink-300">
-              Entrar a una tienda
+            <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
+              ★ Avenida de Marcas (Locales Reales)
             </span>
             <button
               type="button"
@@ -1865,6 +2180,68 @@ export function ViceCityWorld({
             >
               <X className="h-3.5 w-3.5" />
             </button>
+          </div>
+
+          <div className="mb-3 space-y-1.5">
+            {commercialStores.map((cs) => {
+              const count = listingCountByStore[cs.id] ?? cs.activeListingsCount ?? 0;
+              const isHere = activeCommercialSlug === cs.slug;
+              return (
+                <button
+                  key={cs.id}
+                  type="button"
+                  onClick={() => enterCommercialStore(cs.slug)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition ${
+                    isHere
+                      ? "border-amber-300 bg-amber-400/20"
+                      : "border-white/10 bg-white/5 hover:border-cyan-400/50 hover:bg-white/10"
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div
+                      className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-slate-950 p-0.5"
+                      style={{ borderColor: cs.neonColor }}
+                    >
+                      {cs.logoUrl ? (
+                        <img src={cs.logoUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <Store className="h-4 w-4 text-cyan-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1 truncate text-xs font-black text-white">
+                        {cs.name}
+                        <BadgeCheck className="h-3 w-3 shrink-0 text-cyan-300" />
+                      </p>
+                      <p className="truncate text-[10px] text-amber-200/90">
+                        {STORE_PLANS[cs.planTier].badge}
+                        {cs.city ? ` · ${cs.city.name}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-extrabold text-amber-200">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowStoreMenu(false);
+                setWorldModal({ kind: "rentStore" });
+              }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-amber-400/70 bg-amber-500/15 px-3 py-2 text-[11px] font-black text-amber-200 hover:bg-amber-500/25"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> + Alquilá tu Local 3D — Tu Marca Aquí
+            </button>
+          </div>
+
+          <div className="mb-1.5 border-t border-white/10 pt-2.5 px-1">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-pink-300">
+              Tiendas Comunitarias de Usados (10 rubros)
+            </span>
           </div>
           <div className="space-y-1">
             {STORE_THEMES.map((t) => {
@@ -1933,27 +2310,40 @@ export function ViceCityWorld({
             <button
               type="button"
               onClick={() => setShowStoreMenu((v) => !v)}
-              title="Radar Vice City — Clic para ver todas las tiendas"
+              title="Radar Vice City — Clic para ver Tiendas Oficiales y Categorías"
               className="group relative h-32 w-32 overflow-hidden rounded-full border-[3px] border-[#00f0ff]/80 bg-[#180d30]/90 shadow-[0_0_24px_rgba(0,240,255,0.28)] backdrop-blur-md"
             >
-              <div className="absolute inset-x-0 top-0 h-5 bg-cyan-500/45" />
-              <div className="absolute left-1/2 top-0 h-6 w-2.5 -translate-x-1/2 bg-amber-700/80" />
-              <div className="absolute bottom-0 left-1/2 top-5 w-4 -translate-x-1/2 bg-slate-700/85" />
-              <div className="absolute bottom-0 left-1/2 top-5 w-[1px] -translate-x-1/2 bg-amber-300/70" />
+              <div className="absolute inset-x-0 top-0 h-4 bg-cyan-500/45" />
+              <div className="absolute left-1/2 top-0 h-5 w-2.5 -translate-x-1/2 bg-amber-700/80" />
+              <div className="absolute bottom-0 left-1/2 top-4 w-4 -translate-x-1/2 bg-slate-700/85" />
+              <div className="absolute bottom-0 left-1/2 top-4 w-[1px] -translate-x-1/2 bg-amber-300/70" />
 
-              {!activeStoreSlug &&
-                STORE_THEMES.map((t) => {
-                  const leftPct = 50 + (t.x / 24) * 34;
-                  const topPct = 54 + ((t.z + 10) / 76) * 40;
+              {!isInsideAnyStore &&
+                STORE_THEMES.map((t) => (
+                  <span
+                    key={t.categorySlug}
+                    style={{
+                      left: `${50 + (t.x / 24) * 34}%`,
+                      top: `${mapZToRadarPct(t.z)}%`,
+                      backgroundColor: t.neonColor,
+                    }}
+                    className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white/70"
+                  />
+                ))}
+
+              {!isInsideAnyStore &&
+                commercialStores.map((cs, idx) => {
+                  const bx = idx % 2 === 0 ? -17.5 : 17.5;
+                  const bz = 52 + Math.floor(idx / 2) * 20;
                   return (
                     <span
-                      key={t.categorySlug}
+                      key={cs.id}
                       style={{
-                        left: `${leftPct}%`,
-                        top: `${topPct}%`,
-                        backgroundColor: t.neonColor,
+                        left: `${50 + (bx / 24) * 34}%`,
+                        top: `${mapZToRadarPct(bz)}%`,
+                        backgroundColor: "#fbbf24",
                       }}
-                      className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white/80"
+                      className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm ring-1 ring-white"
                     />
                   );
                 })}
@@ -1961,14 +2351,14 @@ export function ViceCityWorld({
               <div
                 style={{
                   left: `${
-                    activeStoreSlug
+                    isInsideAnyStore
                       ? 50 + (radarState.x / 12) * 35
                       : 50 + (radarState.x / 24) * 34
                   }%`,
                   top: `${
-                    activeStoreSlug
+                    isInsideAnyStore
                       ? 50 + (radarState.z / 16) * 35
-                      : Math.max(8, Math.min(92, 54 + ((radarState.z + 10) / 76) * 40))
+                      : mapZToRadarPct(radarState.z)
                   }%`,
                   transform: `translate(-50%, -50%) rotate(${-radarState.yaw + Math.PI}rad)`,
                 }}
@@ -1984,7 +2374,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* BOTTOM-RIGHT: MOBILE ERGONOMIC GAME BUTTONS (Sprint/Jump/Car/Horn)*/}
+      {/* BOTTOM-RIGHT: MOBILE ERGONOMIC GAME BUTTONS                       */}
       {/* ================================================================= */}
       {isMobileViewport && !anyOverlayOpen && (
         <div className="fixed bottom-4 right-3 z-20 flex flex-col items-end gap-2">
@@ -2009,7 +2399,7 @@ export function ViceCityWorld({
             </div>
           ) : (
             <>
-              {nearbyCar && !activeStoreSlug && (
+              {nearbyCar && !isInsideAnyStore && (
                 <button
                   type="button"
                   onClick={() => enterCar(nearbyCar.id)}
@@ -2046,7 +2436,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* CINEMATIC 3D PRODUCT STAND INSPECTION BAR (Inside Showroom)       */}
+      {/* CINEMATIC 3D PRODUCT STAND INSPECTION BAR                         */}
       {/* ================================================================= */}
       {inspectedSpot && !worldModal && (
         <div className="fixed inset-x-3 bottom-4 z-30 mx-auto max-w-xl">
@@ -2055,11 +2445,18 @@ export function ViceCityWorld({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="rounded-md bg-cyan-500/25 px-1.5 py-0.5 text-[10px] font-extrabold uppercase text-cyan-200">
-                    Vista 3D en Showroom
+                    {inspectedSpot.listing.store
+                      ? `★ ${inspectedSpot.listing.store.name}`
+                      : "Vista 3D en Showroom"}
                   </span>
                   {inspectedSpot.listing.savingsPercent && (
                     <span className="rounded-md bg-emerald-500 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
                       -{inspectedSpot.listing.savingsPercent}% vs. nuevo
+                    </span>
+                  )}
+                  {inspectedSpot.listing.stockQuantity != null && (
+                    <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                      Stock: {inspectedSpot.listing.stockQuantity}
                     </span>
                   )}
                 </div>
@@ -2089,7 +2486,6 @@ export function ViceCityWorld({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              {/* Live 3D Stand Photo Carousel Controls */}
               <div className="flex items-center gap-1.5">
                 {inspectedSpot.listing.images.length > 1 ? (
                   <>
@@ -2120,8 +2516,21 @@ export function ViceCityWorld({
                 )}
               </div>
 
-              {/* Action Buttons: Favorite, Share, Full Sheet / Chat */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {inspectedSpot.listing.storeId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      addToStoreCart(inspectedSpot.listing.storeId!, inspectedSpot.listing);
+                      audioRef.current?.playClick();
+                    }}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl bg-emerald-500 px-3 text-xs font-black text-slate-950 shadow-md hover:bg-emerald-400"
+                  >
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    <span>+ Pedido</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => toggleFavorite(inspectedSpot.listing.id)}
@@ -2169,7 +2578,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* BOTTOM-CENTER: CONTEXTUAL INTERACTIVE PROMPT (Above mobile thumbs)*/}
+      {/* BOTTOM-CENTER: CONTEXTUAL INTERACTIVE PROMPT                      */}
       {/* ================================================================= */}
       {!inspectedSpot && (
         <div className="pointer-events-none fixed inset-x-3 bottom-[122px] z-20 flex flex-col items-center gap-2 md:bottom-4">
@@ -2184,6 +2593,26 @@ export function ViceCityWorld({
                   {prompt.kind === "enter_car" ? "F" : "E"}
                 </span>
                 <div className="min-w-0">
+                  {prompt.kind === "enter_commercial" && (
+                    <>
+                      <p className="truncate text-xs font-black uppercase text-amber-300">
+                        ★ Entrar a {prompt.store.name}
+                      </p>
+                      <p className="text-[11px] text-slate-200">
+                        Tienda Oficial · {prompt.count} productos · Tocá o [E]
+                      </p>
+                    </>
+                  )}
+                  {prompt.kind === "rent_lot" && (
+                    <>
+                      <p className="truncate text-xs font-black uppercase text-amber-300">
+                        {prompt.label} — Tu Marca Aquí
+                      </p>
+                      <p className="text-[11px] text-slate-200">
+                        Alquilá este local 3D con tu logo y catálogo · Tocá o [E]
+                      </p>
+                    </>
+                  )}
                   {prompt.kind === "enter_store" && (
                     <>
                       <p className="truncate text-xs font-black uppercase text-cyan-200">
@@ -2230,7 +2659,7 @@ export function ViceCityWorld({
                         Hablar con el Asesor de {prompt.storeName}
                       </p>
                       <p className="text-[11px] text-slate-200">
-                        Te recomienda la mejor oferta · Tocá o [E]
+                        Información, horarios y mejor oferta · Tocá o [E]
                       </p>
                     </>
                   )}
@@ -2247,9 +2676,17 @@ export function ViceCityWorld({
                   {prompt.kind === "exit_store" && (
                     <>
                       <p className="text-xs font-black uppercase text-pink-300">
-                        Salir a Ocean Boulevard
+                        Salir a {prompt.label}
                       </p>
                       <p className="text-[11px] text-slate-200">Tocá o presioná [E]</p>
+                    </>
+                  )}
+                  {prompt.kind === "store_info" && (
+                    <>
+                      <p className="text-xs font-black uppercase text-emerald-300">
+                        Catálogo, Mapa y Pedido WhatsApp — {prompt.store.name}
+                      </p>
+                      <p className="text-[11px] text-slate-200">Ver todos los productos · [E]</p>
                     </>
                   )}
                   {prompt.kind === "publish_here" && (
@@ -2329,7 +2766,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* IN-STORE INTERACTIVE NPC ADVISOR DIALOG                           */}
+      {/* IN-STORE INTERACTIVE NPC ADVISOR DIALOG (Brand OR Category!)      */}
       {/* ================================================================= */}
       {showNpcPanel && activeTheme && (
         <div
@@ -2342,18 +2779,26 @@ export function ViceCityWorld({
           >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-slate-950"
-                  style={{ backgroundColor: activeTheme.neonColor }}
-                >
-                  NPC
-                </span>
+                {activeCommercialStore?.logoUrl ? (
+                  <img
+                    src={activeCommercialStore.logoUrl}
+                    alt=""
+                    className="h-9 w-9 rounded-xl border border-white/20 bg-slate-950 object-contain p-1"
+                  />
+                ) : (
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-slate-950"
+                    style={{ backgroundColor: activeTheme.neonColor }}
+                  >
+                    NPC
+                  </span>
+                )}
                 <div>
                   <h2 className="text-sm font-black italic text-cyan-200">
                     Asesor de {activeTheme.viceName}
                   </h2>
                   <p className="text-[11px] text-slate-300">
-                    {activeStoreListings.length} publicaciones activas en esta tienda
+                    {activeShowroomListings.length} productos activos en este showroom
                   </p>
                 </div>
               </div>
@@ -2368,7 +2813,9 @@ export function ViceCityWorld({
 
             <div className="space-y-3 p-4 text-xs">
               <p className="rounded-xl bg-white/10 p-3 leading-relaxed text-slate-100">
-                {bestStoreDeal ? (
+                {activeCommercialStore?.npcGreeting ? (
+                  <>&quot;{activeCommercialStore.npcGreeting}&quot;</>
+                ) : bestStoreDeal ? (
                   <>
                     &quot;¡Bienvenido a <strong>{activeTheme.viceName}</strong>! La mejor
                     oportunidad ahora mismo acá es{" "}
@@ -2386,9 +2833,32 @@ export function ViceCityWorld({
                     . ¿Querés inspeccionarla?&quot;
                   </>
                 ) : (
-                  `"¡Bienvenido a ${activeTheme.viceName}! Todavía no hay avisos con estos filtros. ¡Podés ser el primero en publicar gratis acá!"`
+                  `"¡Bienvenido a ${activeTheme.viceName}! Todavía no hay avisos con estos filtros."`
                 )}
               </p>
+
+              {activeCommercialStore && (
+                <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200">
+                  {activeCommercialStore.address && (
+                    <p className="flex items-start gap-1.5">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                      <span>{activeCommercialStore.address}</span>
+                    </p>
+                  )}
+                  {activeCommercialStore.openingHours && (
+                    <p className="flex items-start gap-1.5">
+                      <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                      <span>{activeCommercialStore.openingHours}</span>
+                    </p>
+                  )}
+                  {activeCommercialStore.whatsappPhone && (
+                    <p className="flex items-start gap-1.5">
+                      <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+                      <span>WhatsApp: {activeCommercialStore.whatsappPhone}</span>
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 {bestStoreDeal && (
@@ -2400,35 +2870,54 @@ export function ViceCityWorld({
                     }}
                     className="flex w-full items-center justify-between rounded-xl bg-emerald-600 px-3.5 py-2.5 font-extrabold text-white hover:bg-emerald-500"
                   >
-                    <span>Zoom 3D a la mejor oferta de esta tienda</span>
+                    <span>Zoom 3D a la mejor oferta de este local</span>
                     <Sparkles className="h-4 w-4" />
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateFilters({ minSavings: "35", sort: "savings" });
-                    setShowNpcPanel(false);
-                    notifyToast("Mostrando solo ofertas con +35% de ahorro", "success");
-                  }}
-                  className="flex w-full items-center justify-between rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-3.5 py-2.5 font-bold text-cyan-100 hover:bg-cyan-500/25"
-                >
-                  <span>Filtrar ofertas con +35% de ahorro</span>
-                  <SlidersHorizontal className="h-4 w-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowNpcPanel(false);
-                    setWorldModal(user ? { kind: "publish" } : { kind: "auth" });
-                  }}
-                  className="flex w-full items-center justify-between rounded-xl border border-pink-400/40 bg-pink-500/15 px-3.5 py-2.5 font-bold text-pink-100 hover:bg-pink-500/25"
-                >
-                  <span>Publicar mi producto en {activeCategoryObj?.name}</span>
-                  <Plus className="h-4 w-4" />
-                </button>
+                {activeCommercialStore ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNpcPanel(false);
+                      setWorldModal({
+                        kind: "commercialStore",
+                        slug: activeCommercialStore.slug,
+                        title: activeCommercialStore.name,
+                      });
+                    }}
+                    className="flex w-full items-center justify-between rounded-xl border border-cyan-400/50 bg-cyan-500/20 px-3.5 py-2.5 font-bold text-cyan-100 hover:bg-cyan-500/30"
+                  >
+                    <span>Abrir catálogo completo y Pedido WhatsApp</span>
+                    <ShoppingBag className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateFilters({ minSavings: "35", sort: "savings" });
+                        setShowNpcPanel(false);
+                        notifyToast("Mostrando solo ofertas con +35% de ahorro", "success");
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-cyan-400/40 bg-cyan-500/15 px-3.5 py-2.5 font-bold text-cyan-100 hover:bg-cyan-500/25"
+                    >
+                      <span>Filtrar ofertas con +35% de ahorro</span>
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNpcPanel(false);
+                        setWorldModal(user ? { kind: "publish" } : { kind: "auth" });
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-pink-400/40 bg-pink-500/15 px-3.5 py-2.5 font-bold text-pink-100 hover:bg-pink-500/25"
+                    >
+                      <span>Publicar mi producto en {activeCategoryObj?.name}</span>
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2436,7 +2925,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* LIVE 3D FILTER KIOSK PANEL (Includes Subcategory Filter!)         */}
+      {/* LIVE 3D FILTER KIOSK PANEL                                        */}
       {/* ================================================================= */}
       {showKioskPanel && (
         <div
@@ -2470,7 +2959,7 @@ export function ViceCityWorld({
                   type="search"
                   value={filters.q || ""}
                   onChange={(e) => updateFilters({ q: e.target.value || undefined })}
-                  placeholder="Buscar medias, Corolla, iPhone, casa..."
+                  placeholder="Buscar medias, Corolla, iPhone, SKU..."
                   className="w-full rounded-xl border border-white/15 bg-white/10 py-2 pl-9 pr-3 text-xs text-white placeholder:text-slate-300 outline-none focus:border-cyan-400"
                 />
               </div>
@@ -2520,6 +3009,27 @@ export function ViceCityWorld({
 
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold text-slate-300">
+                    Tipo de vendedor
+                  </label>
+                  <select
+                    value={filters.sellerType || ""}
+                    onChange={(e) =>
+                      updateFilters({
+                        sellerType: e.target.value as "" | "official" | "individual",
+                      })
+                    }
+                    className="w-full rounded-xl border border-white/15 bg-[#1e123b] px-2.5 py-2 text-xs text-white outline-none"
+                  >
+                    <option value="">Todos</option>
+                    <option value="official">Solo Tiendas Oficiales</option>
+                    <option value="individual">Solo Particulares</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-300">
                     Moneda
                   </label>
                   <select
@@ -2534,22 +3044,22 @@ export function ViceCityWorld({
                     <option value="USD">Solo Dólares (USD)</option>
                   </select>
                 </div>
-              </div>
 
-              <div>
-                <label className="mb-1 block text-[11px] font-semibold text-slate-300">
-                  Ahorro mínimo vs. nuevo
-                </label>
-                <select
-                  value={filters.minSavings || ""}
-                  onChange={(e) => updateFilters({ minSavings: e.target.value || undefined })}
-                  className="w-full rounded-xl border border-white/15 bg-[#1e123b] px-2.5 py-2 text-xs text-white outline-none"
-                >
-                  <option value="">Cualquier ahorro</option>
-                  <option value="20">Al menos 20% menos</option>
-                  <option value="35">Al menos 35% menos</option>
-                  <option value="50">Al menos 50% menos</option>
-                </select>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold text-slate-300">
+                    Ahorro mínimo vs. nuevo
+                  </label>
+                  <select
+                    value={filters.minSavings || ""}
+                    onChange={(e) => updateFilters({ minSavings: e.target.value || undefined })}
+                    className="w-full rounded-xl border border-white/15 bg-[#1e123b] px-2.5 py-2 text-xs text-white outline-none"
+                  >
+                    <option value="">Cualquier ahorro</option>
+                    <option value="20">Al menos 20%</option>
+                    <option value="35">Al menos 35%</option>
+                    <option value="50">Al menos 50%</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -2604,7 +3114,7 @@ export function ViceCityWorld({
                   onClick={() => setShowKioskPanel(false)}
                   className="rounded-xl bg-[#00f0ff] px-4 py-2 font-black text-slate-950 hover:brightness-110"
                 >
-                  Aplicar en 3D ({activeStoreSlug ? activeStoreListings.length : listings.length})
+                  Aplicar en 3D ({isInsideAnyStore ? activeShowroomListings.length : listings.length})
                 </button>
               </div>
             </div>
@@ -2613,7 +3123,7 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* FLOATING REAL MARKETPLACE MODAL OVER THE 3D WORLD                 */}
+      {/* FLOATING REAL MARKETPLACE & COMMERCIAL STORE MODAL OVER 3D WORLD  */}
       {/* ================================================================= */}
       {worldModal && (
         <div
@@ -2629,13 +3139,17 @@ export function ViceCityWorld({
                 <Sparkles className="h-4 w-4 shrink-0 text-[#00f0ff]" />
                 <span className="truncate text-xs font-extrabold tracking-wide">
                   {worldModal.kind === "listing" && (worldModal.title || "Detalle de publicación")}
+                  {worldModal.kind === "commercialStore" &&
+                    (worldModal.title || "Tienda Oficial — ReUsa PY")}
+                  {worldModal.kind === "rentStore" && "Alquilá tu Local 3D — Avenida de Marcas"}
+                  {worldModal.kind === "merchantDashboard" && "Mi Tienda Oficial — Panel de Gestión"}
                   {worldModal.kind === "publish" &&
                     (worldModal.editId ? "Editar publicación" : "Publicar en ReUsa PY")}
                   {worldModal.kind === "chat" && "Mensajes — ReUsa PY"}
                   {worldModal.kind === "favorites" && "Favoritos y Alertas"}
                   {worldModal.kind === "profile" && "Perfil y Reputación"}
                   {worldModal.kind === "auth" && "Ingresar a ReUsa PY"}
-                  {worldModal.kind === "admin" && "Panel de Moderación"}
+                  {worldModal.kind === "admin" && "Administración de Locales y Moderación"}
                 </span>
               </div>
               <button
@@ -2652,6 +3166,27 @@ export function ViceCityWorld({
                 <ListingDetailView
                   slug={worldModal.slug}
                   onClose={() => setWorldModal(null)}
+                />
+              )}
+              {worldModal.kind === "commercialStore" && (
+                <CommercialStoreView
+                  slug={worldModal.slug}
+                  onEnter3DStore={(storeSlug) => {
+                    setWorldModal(null);
+                    enterCommercialStore(storeSlug);
+                  }}
+                />
+              )}
+              {worldModal.kind === "rentStore" && (
+                <RentStoreView defaultPlan={worldModal.defaultPlan} />
+              )}
+              {worldModal.kind === "merchantDashboard" && (
+                <MerchantDashboardView
+                  initialStoreId={worldModal.storeId}
+                  onEnter3DStore={(storeSlug) => {
+                    setWorldModal(null);
+                    enterCommercialStore(storeSlug);
+                  }}
                 />
               )}
               {worldModal.kind === "publish" && (

@@ -1339,7 +1339,272 @@ async function main() {
     });
   }
 
-  console.log(`Seed complete: ${DEPARTMENTS_DATA.length} departments, ${CATEGORIES_DATA.length} root categories, ${listingsSeed.length} listings.`);
+  // Seed 2 realistic Paraguayan Commercial Brand Stores (Avenida de Marcas 3D)
+  const adminId = userMap.get("admin@reusa.py")!;
+  const expiresIn90Days = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
+  const guaraniTechStore = await prisma.commercialStore.upsert({
+    where: { slug: "guaranitech-store" },
+    update: {},
+    create: {
+      slug: "guaranitech-store",
+      name: "GuaraníTech Store",
+      tagline: "Apple, Gaming & Outlet Certificado PY",
+      description:
+        "Showroom oficial de tecnología en Asunción. Equipos nuevos en caja sellada y línea Outlet certificado con garantía escrita de 6 meses y envíos a todo Paraguay.",
+      ownerId: camilaId,
+      categoryId: catMap.get("tecnologia")!,
+      status: "ACTIVE",
+      planTier: "FLAGSHIP",
+      maxProducts: 250,
+      monthlyPricePyg: 690000,
+      expiresAt: expiresIn90Days,
+      slotOrder: 10,
+      logoUrl: "/uploads/seed/logo-guaranitech.svg",
+      facadeColor: "#ecfeff",
+      neonColor: "#00f0ff",
+      secondaryNeon: "#ff2a9d",
+      npcGreeting:
+        "¡Bienvenido a GuaraníTech Store! Todos nuestros equipos tienen garantía escrita y delivery gratis en Gran Asunción. Sumá lo que te guste al carrito y te cerramos el pedido directo por WhatsApp.",
+      departmentId: asuCity.deptId,
+      cityId: asuCity.id,
+      address: "Av. Mariscal López 3420 c/ Cruz del Chaco, Villa Morra, Asunción",
+      openingHours: "Lun a Vie 09:00–19:30 · Sáb 09:30–16:00",
+      whatsappPhone: "0981442210",
+      instagramUrl: "https://instagram.com/guaranitechpy",
+      websiteUrl: "https://reusa-py.vercel.app/tienda/guaranitech-store",
+      approxLat: -25.2918,
+      approxLng: -57.5812,
+      visitsCount: 148,
+      productClicksCount: 64,
+      whatsappClicksCount: 19,
+    },
+  });
+
+  const terereSportStore = await prisma.commercialStore.upsert({
+    where: { slug: "terere-sport-py" },
+    update: {},
+    create: {
+      slug: "terere-sport-py",
+      name: "Tereré Sport & Outdoors",
+      tagline: "Bicis MTB, Running & Camping Oficial",
+      description:
+        "Local especializado en ciclismo, zapatillas deportivas y equipamiento outdoor en San Lorenzo y envíos a todo el país. Nuevos con garantía y saldos de temporada.",
+      ownerId: adminId,
+      categoryId: catMap.get("deportes")!,
+      status: "ACTIVE",
+      planTier: "FEATURED",
+      maxProducts: 60,
+      monthlyPricePyg: 390000,
+      expiresAt: expiresIn90Days,
+      slotOrder: 20,
+      logoUrl: "/uploads/seed/logo-tereresport.svg",
+      facadeColor: "#ecfdf5",
+      neonColor: "#34d399",
+      secondaryNeon: "#fbbf24",
+      npcGreeting:
+        "¡Mba'éichapa! En Tereré Sport equipamos tus rodadas y entrenamientos con precios directo de importador. Elegí tus favoritos y pedilos juntos por WhatsApp.",
+      departmentId: slCity.deptId,
+      cityId: slCity.id,
+      address: "Ruta Mcal. Estigarribia Km 11, Shopping Pinedo / San Lorenzo",
+      openingHours: "Lun a Sáb 09:00–20:00",
+      whatsappPhone: "0981100200",
+      instagramUrl: "https://instagram.com/tereresportpy",
+      websiteUrl: "https://reusa-py.vercel.app/tienda/terere-sport-py",
+      approxLat: -25.3292,
+      approxLng: -57.5194,
+      visitsCount: 92,
+      productClicksCount: 41,
+      whatsappClicksCount: 12,
+    },
+  });
+
+  const commercialListingsSeed = [
+    {
+      slug: "gt-iphone-16-pro-256gb-sellado-garantia",
+      title: "iPhone 16 Pro 256GB Titanio Desierto — Nuevo Sellado",
+      description:
+        "Equipo 100% nuevo en caja sellada, libre de fábrica (eSIM + físico). Incluye factura legal y 1 año de garantía oficial. Delivery gratis en Asunción.",
+      sellerId: camilaId,
+      storeId: guaraniTechStore.id,
+      categorySlug: "tecnologia",
+      subcategorySlug: "celulares",
+      condition: "BRAND_NEW",
+      sku: "GT-IP16P-256",
+      stockQuantity: 6,
+      currency: "USD",
+      price: 1090,
+      referenceNewPrice: 1280,
+      savingsPercent: 15,
+      city: asuCity,
+      images: ["/uploads/seed/iphone.jpg", "/uploads/seed/laptop.jpg"],
+    },
+    {
+      slug: "gt-macbook-air-m3-16gb-outlet-exhibicion",
+      title: "MacBook Air M3 13\" 16GB / 512GB — Outlet Exhibición",
+      description:
+        "Unidad de exhibición en vitrina con apenas 8 ciclos de batería, estética 10/10, caja y cargador MagSafe originales. Garantía escrita GuaraníTech 6 meses.",
+      sellerId: camilaId,
+      storeId: guaraniTechStore.id,
+      categorySlug: "tecnologia",
+      subcategorySlug: "notebooks",
+      condition: "OUTLET",
+      sku: "GT-MBA-M3-OUT",
+      stockQuantity: 2,
+      currency: "USD",
+      price: 980,
+      referenceNewPrice: 1350,
+      savingsPercent: 27,
+      city: asuCity,
+      images: ["/uploads/seed/laptop.jpg", "/uploads/seed/escritorio.jpg"],
+    },
+    {
+      slug: "gt-combo-home-office-pro-escritorio-silla",
+      title: "Setup Home Office Pro — Escritorio + Silla Mesh (Nuevo)",
+      description:
+        "Combo oficial de oficina en casa: escritorio melamina roble 140cm + silla ergonómica lumbar regulable. Armado gratis en Gran Asunción.",
+      sellerId: camilaId,
+      storeId: guaraniTechStore.id,
+      categorySlug: "hogar-muebles",
+      subcategorySlug: "oficina-estudio",
+      condition: "BRAND_NEW",
+      sku: "GT-SETUP-PRO",
+      stockQuantity: 9,
+      currency: "PYG",
+      price: 1490000,
+      referenceNewPrice: 1850000,
+      savingsPercent: 19,
+      city: asuCity,
+      images: ["/uploads/seed/escritorio.jpg"],
+    },
+    {
+      slug: "ts-bicicleta-mtb-aro-29-shimano-deore-nueva",
+      title: "Bicicleta MTB Aro 29 Aluminio Shimano Deore 12v — Nueva",
+      description:
+        "Cuadro aluminio hidroformado liviano, frenos hidráulicos Shimano MT200, suspensión bloqueable al manubrio. Incluye primer service gratis en local.",
+      sellerId: adminId,
+      storeId: terereSportStore.id,
+      categorySlug: "deportes",
+      subcategorySlug: "bicicletas",
+      condition: "BRAND_NEW",
+      sku: "TS-MTB29-DEORE",
+      stockQuantity: 5,
+      currency: "PYG",
+      price: 3450000,
+      referenceNewPrice: 4100000,
+      savingsPercent: 16,
+      city: slCity,
+      images: ["/uploads/seed/bici.jpg"],
+    },
+    {
+      slug: "ts-zapatillas-running-pro-outlet-talles-39-44",
+      title: "Zapatillas Running Amortiguación Pro — Outlet Temporada",
+      description:
+        "Pares nuevos de liquidación de temporada, talles 39 al 44 en stock. Súper livianas para asfalto y costanera.",
+      sellerId: adminId,
+      storeId: terereSportStore.id,
+      categorySlug: "ropa-calzado",
+      subcategorySlug: "calzado",
+      condition: "OUTLET",
+      sku: "TS-RUN-PRO-OUT",
+      stockQuantity: 14,
+      currency: "PYG",
+      price: 320000,
+      referenceNewPrice: 540000,
+      savingsPercent: 41,
+      city: slCity,
+      images: ["/uploads/seed/zapatillas.jpg", "/uploads/seed/medias.jpg"],
+    },
+    {
+      slug: "ts-pack-6-medias-compresion-running-nuevas",
+      title: "Pack x6 Medias Técnicas Compresión Running — Nuevas",
+      description:
+        "Tejido respirable anti-ampollas, ideales para ciclismo, running y gimnasio. Stock permanente en colores surtidos.",
+      sellerId: adminId,
+      storeId: terereSportStore.id,
+      categorySlug: "ropa-calzado",
+      subcategorySlug: "medias-accesorios",
+      condition: "BRAND_NEW",
+      sku: "TS-MED-6PK",
+      stockQuantity: 32,
+      currency: "PYG",
+      price: 95000,
+      referenceNewPrice: 135000,
+      savingsPercent: 30,
+      city: slCity,
+      images: ["/uploads/seed/medias.jpg"],
+    },
+  ];
+
+  for (const item of commercialListingsSeed) {
+    const existing = await prisma.listing.findUnique({ where: { slug: item.slug } });
+    if (!existing) {
+      await prisma.listing.create({
+        data: {
+          slug: item.slug,
+          title: item.title,
+          description: item.description,
+          sellerId: item.sellerId,
+          storeId: item.storeId,
+          categoryId: catMap.get(item.categorySlug)!,
+          subcategoryId: catMap.get(item.subcategorySlug) || null,
+          status: "ACTIVE",
+          condition: item.condition,
+          sku: item.sku,
+          stockQuantity: item.stockQuantity,
+          isFree: false,
+          currency: item.currency,
+          price: item.price,
+          referenceNewPrice: item.referenceNewPrice,
+          savingsPercent: item.savingsPercent,
+          isNegotiable: false,
+          acceptsTrade: false,
+          pickupInPerson: true,
+          publicMeetup: false,
+          localDelivery: true,
+          localDeliveryFree: true,
+          nationalShipping: true,
+          nationalShippingFree: false,
+          showWhatsapp: true,
+          departmentId: item.city.deptId,
+          cityId: item.city.id,
+          approxLat: item.city.lat,
+          approxLng: item.city.lng,
+          isFeatured: true,
+          expiresAt: expiresIn90Days,
+          images: {
+            create: item.images.map((url, idx) => ({
+              url,
+              order: idx,
+              isCover: idx === 0,
+            })),
+          },
+        },
+      });
+    }
+  }
+
+  const inquiryCount = await prisma.storeInquiry.count();
+  if (inquiryCount === 0) {
+    await prisma.storeInquiry.create({
+      data: {
+        businessName: "Casa Mbarete Herramientas",
+        contactName: "Roberto Duarte",
+        contactPhone: "0982334455",
+        contactEmail: "roberto@casambarete.com.py",
+        rubro: "Herramientas",
+        cityName: "Luque",
+        desiredPlan: "FEATURED",
+        instagramOrWeb: "@casambaretepy",
+        notes: "Queremos subir 45 productos de ferretería y herramientas eléctricas con nuestro logo en el mundo 3D.",
+        status: "NEW",
+      },
+    });
+  }
+
+  console.log(
+    `Seed complete: ${DEPARTMENTS_DATA.length} departments, ${CATEGORIES_DATA.length} root categories, ${listingsSeed.length + commercialListingsSeed.length} listings, 2 commercial stores.`
+  );
 }
 
 main()

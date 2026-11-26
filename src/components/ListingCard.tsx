@@ -2,6 +2,7 @@
 
 import {
   ArrowDownRight,
+  BadgeCheck,
   Car,
   Heart,
   Home,
@@ -26,7 +27,7 @@ interface ListingCardProps {
 }
 
 export function ListingCard({ listing, layout = "grid", compact = false }: ListingCardProps) {
-  const { favoriteIds, toggleFavorite, openListing } = useApp();
+  const { favoriteIds, toggleFavorite, openListing, openCommercialStore } = useApp();
   const isFav = favoriteIds.has(listing.id);
   const cover = listing.images.find((i) => i.isCover)?.url || listing.images[0]?.url;
   const locationLabel = [listing.neighborhood?.name, listing.city.name].filter(Boolean).join(", ");
@@ -93,9 +94,24 @@ export function ListingCard({ listing, layout = "grid", compact = false }: Listi
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#0067c0]">
-              {listing.title}
-            </h3>
+            <div className="min-w-0">
+              {listing.store && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCommercialStore(listing.store!.slug, listing.store!.name);
+                  }}
+                  className="mb-0.5 inline-flex max-w-full items-center gap-1 rounded-full border border-fuchsia-200 bg-fuchsia-50 px-2 py-0.5 text-[10px] font-bold text-fuchsia-800 transition hover:bg-fuchsia-100"
+                >
+                  <BadgeCheck className="h-3 w-3 shrink-0 text-fuchsia-600" />
+                  <span className="truncate">Tienda Oficial · {listing.store.name}</span>
+                </button>
+              )}
+              <h3 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#0067c0]">
+                {listing.title}
+              </h3>
+            </div>
             <button
               type="button"
               onClick={(e) => {
@@ -124,6 +140,16 @@ export function ListingCard({ listing, layout = "grid", compact = false }: Listi
             )}
             {listing.realEstateOperation === "RENT" && (
               <span className="text-xs font-medium text-slate-500">/mes</span>
+            )}
+            {listing.condition === "BRAND_NEW" && (
+              <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-bold text-cyan-800">
+                Nuevo
+              </span>
+            )}
+            {listing.condition === "OUTLET" && (
+              <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                Outlet
+              </span>
             )}
           </div>
 
@@ -170,9 +196,19 @@ export function ListingCard({ listing, layout = "grid", compact = false }: Listi
               GRATIS
             </span>
           )}
+          {listing.condition === "BRAND_NEW" && (
+            <span className="rounded-md bg-cyan-600/95 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-sm">
+              Nuevo
+            </span>
+          )}
+          {listing.condition === "OUTLET" && (
+            <span className="rounded-md bg-amber-600/95 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-sm">
+              Outlet
+            </span>
+          )}
           {!listing.isFree && listing.savingsPercent && (
             <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-600/95 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm backdrop-blur-xs">
-              <Tag className="h-3 w-3" />-{listing.savingsPercent}% vs nuevo
+              <Tag className="h-3 w-3" />-{listing.savingsPercent}%
             </span>
           )}
           {listing.realEstateOperation && (
@@ -228,6 +264,20 @@ export function ListingCard({ listing, layout = "grid", compact = false }: Listi
       </div>
 
       <div className="flex flex-1 flex-col p-3">
+        {listing.store && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openCommercialStore(listing.store!.slug, listing.store!.name);
+            }}
+            className="mb-1 inline-flex w-fit max-w-full items-center gap-1 rounded-full border border-fuchsia-200/90 bg-fuchsia-50/90 px-2 py-0.5 text-[10px] font-bold text-fuchsia-800 transition hover:bg-fuchsia-100"
+          >
+            <BadgeCheck className="h-3 w-3 shrink-0 text-fuchsia-600" />
+            <span className="truncate">{listing.store.name}</span>
+          </button>
+        )}
+
         <div className="flex items-baseline justify-between gap-1.5">
           <div className="flex items-baseline gap-1.5">
             <span className="text-[16px] font-extrabold tracking-tight text-slate-900">
@@ -244,7 +294,9 @@ export function ListingCard({ listing, layout = "grid", compact = false }: Listi
 
         {!listing.isFree && listing.referenceNewPrice && (
           <p className="mt-0.5 text-[11px] text-slate-500">
-            Nuevo ref.:{" "}
+            {listing.condition === "BRAND_NEW" || listing.condition === "OUTLET"
+              ? "Precio lista:"
+              : "Nuevo ref.:"}{" "}
             <span className="line-through">
               {formatPrice(listing.referenceNewPrice, listing.currency)}
             </span>
