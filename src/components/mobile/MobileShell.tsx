@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Monitor,
   Plus,
+  Search,
   Sparkles,
   Store,
   User,
@@ -41,6 +42,7 @@ export function MobileShell() {
     openListing,
     openChat,
     openMerchantDashboard,
+    setCommandSearchOpen,
     unreadChatCount,
     notifications,
     unreadNotifCount,
@@ -76,6 +78,14 @@ export function MobileShell() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCommandSearchOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700 active:scale-95"
+            aria-label="Buscar"
+          >
+            <Search className="h-4 w-4 text-[#0067c0]" />
+          </button>
           {myStores.length > 0 && (
             <button
               type="button"
@@ -90,7 +100,7 @@ export function MobileShell() {
             onClick={() => setExperienceMode("world3d")}
             className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#ff2a9d] to-[#00b4d8] px-2.5 py-1 text-[11px] font-extrabold text-white shadow-sm"
           >
-            <Sparkles className="h-3 w-3" /> 3D Vice
+            <Sparkles className="h-3 w-3" /> Mundo 3D
           </button>
           {isDesktopPreviewingMobile && (
             <button

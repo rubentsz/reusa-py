@@ -82,6 +82,15 @@ export async function GET() {
           ? {
               id: lastMsg.id,
               body: lastMsg.body,
+              kind: lastMsg.kind as "TEXT" | "OFFER",
+              offerAmount: lastMsg.offerAmount,
+              offerCurrency: lastMsg.offerCurrency as "PYG" | "USD" | null,
+              offerStatus: lastMsg.offerStatus as
+                | "PENDING"
+                | "ACCEPTED"
+                | "REJECTED"
+                | "COUNTERED"
+                | null,
               senderId: lastMsg.senderId,
               createdAt: lastMsg.createdAt.toISOString(),
               readAt: lastMsg.readAt ? lastMsg.readAt.toISOString() : null,
@@ -102,6 +111,8 @@ export async function GET() {
 const createConvSchema = z.object({
   listingId: z.string().min(1),
   initialMessage: z.string().trim().max(1500).optional(),
+  offerAmount: z.number().positive().optional(),
+  offerCurrency: z.enum(["PYG", "USD"]).optional(),
 });
 
 export async function POST(request: Request) {
@@ -119,7 +130,7 @@ export async function POST(request: Request) {
 
     const listing = await prisma.listing.findUnique({
       where: { id: parsed.data.listingId },
-      select: { id: true, slug: true, title: true, sellerId: true },
+      select: { id: true, slug: true, title: true, sellerId: true, currency: true, isFree: true },
     });
     if (!listing) {
       return NextResponse.json({ error: "Publicación no encontrada" }, { status: 404 });
@@ -145,7 +156,45 @@ export async function POST(request: Request) {
       });
     }
 
-    if (parsed.data.initialMessage && parsed.data.initialMessage.length > 0) {
+    const hasOffer = typeof parsed.data.offerAmount === "number" && parsed.data.offerAmount > 0;
+    if (hasOffer) {
+      const currency = parsed.data.offerCurrency || (listing.currency as "PYG" | "USD");
+      await prisma.message.updateMany({
+        where: { conversationId: conversation.id, kind: "OFFER", offerStatus: "PENDING" },
+        data: { offerStatus: "COUNTERED" },
+      });
+      const formattedAmt =
+        currency === "USD"
+          ? `US$ ${Math.round(parsed.data.offerAmount!).toLocaleString("es-PY")}`
+          : `Gs. ${Math.round(parsed.data.offerAmount!).toLocaleString("es-PY")}`;
+      const note = parsed.data.initialMessage?.trim() || `Te ofrezco ${formattedAmt} por este producto.`;
+
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: user.id,
+          body: note,
+          kind: "OFFER",
+          offerAmount: parsed.data.offerAmount!,
+          offerCurrency: currency,
+          offerStatus: "PENDING",
+        },
+      });
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      });
+      await prisma.notification.create({
+        data: {
+          userId: listing.sellerId,
+          type: "MESSAGE",
+          title: `Nueva oferta de ${user.name}: ${formattedAmt}`,
+          body: `${listing.title} — "${note.slice(0, 90)}"`,
+          linkUrl: `/chat?c=${conversation.id}`,
+          listingId: listing.id,
+        },
+      });
+    } else if (parsed.data.initialMessage && parsed.data.initialMessage.length > 0) {
       await prisma.message.create({
         data: {
           conversationId: conversation.id,

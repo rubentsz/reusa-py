@@ -45,6 +45,7 @@ export function CommercialStoreView({
     trackStoreEvent,
     openListing,
     openMerchantDashboard,
+    openStoreStoryCard,
     notifyToast,
   } = useApp();
 
@@ -206,6 +207,13 @@ export function CommercialStoreView({
                 <Sparkles className="h-3.5 w-3.5" /> Entrar al Showroom 3D
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => openStoreStoryCard(store, catalog)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#ff2a9d] to-fuchsia-600 px-3 py-2 text-xs font-extrabold text-white shadow-md hover:brightness-110"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Placa IG / WhatsApp
+            </button>
             <button
               type="button"
               onClick={() => {

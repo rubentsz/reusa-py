@@ -9,6 +9,8 @@ import {
 } from "@/components/AppContext";
 import { DesktopShell } from "@/components/desktop/DesktopShell";
 import { MobileShell } from "@/components/mobile/MobileShell";
+import { CommandSearchModal } from "@/components/CommandSearchModal";
+import { StoryCardModal } from "@/components/StoryCardModal";
 import type {
   CategoryDTO,
   CommercialStoreDTO,
@@ -57,13 +59,19 @@ function ShellRouter({
         <DesktopShell />
       )}
 
+      {/* Global Ctrl+K Instant Search & 3D Teleport Palette */}
+      <CommandSearchModal />
+
+      {/* Global WhatsApp Status / Instagram Story 9:16 Card Generator */}
+      <StoryCardModal />
+
       {/* Fluent Toast Notifications */}
       {toasts.length > 0 && (
-        <div className="pointer-events-none fixed right-4 top-4 z-[1200] flex flex-col gap-2">
+        <div className="pointer-events-none fixed right-4 top-4 z-[1300] flex flex-col gap-2">
           {toasts.map((t) => (
             <div
               key={t.id}
-              className={`pointer-events-auto rounded-xl px-4 py-2.5 text-xs font-semibold shadow-lg backdrop-blur-md ${
+              className={`animate-modal-in pointer-events-auto rounded-xl px-4 py-2.5 text-xs font-semibold shadow-lg backdrop-blur-md ${
                 t.tone === "error"
                   ? "bg-rose-600/95 text-white"
                   : t.tone === "success"

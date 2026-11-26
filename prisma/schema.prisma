@@ -304,6 +304,10 @@ model Message {
   senderId       String
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   body           String
+  kind           String       @default("TEXT") // TEXT | OFFER
+  offerAmount    Float?
+  offerCurrency  String?      // PYG | USD
+  offerStatus    String?      // PENDING | ACCEPTED | REJECTED | COUNTERED
   readAt         DateTime?
   createdAt      DateTime     @default(now())
 

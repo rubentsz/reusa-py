@@ -265,6 +265,10 @@ export interface ConversationDTO {
   lastMessage: {
     id: string;
     body: string;
+    kind?: "TEXT" | "OFFER";
+    offerAmount?: number | null;
+    offerCurrency?: Currency | null;
+    offerStatus?: "PENDING" | "ACCEPTED" | "REJECTED" | "COUNTERED" | null;
     senderId: string;
     createdAt: string;
     readAt: string | null;
@@ -273,11 +277,17 @@ export interface ConversationDTO {
   updatedAt: string;
 }
 
+export type OfferStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COUNTERED";
+
 export interface MessageDTO {
   id: string;
   conversationId: string;
   senderId: string;
   body: string;
+  kind: "TEXT" | "OFFER";
+  offerAmount: number | null;
+  offerCurrency: Currency | null;
+  offerStatus: OfferStatus | null;
   readAt: string | null;
   createdAt: string;
 }

@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Percent,
   Plus,
+  Search,
   Shield,
   Smartphone,
   Sparkles,
@@ -59,6 +60,7 @@ export function DesktopShell() {
     openAuth,
     openRentStore,
     openMerchantDashboard,
+    setCommandSearchOpen,
     notifications,
     unreadNotifCount,
     markNotificationRead,
@@ -359,12 +361,20 @@ export function DesktopShell() {
             className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#ff2a9d] to-[#00b4d8] px-2.5 py-1 text-[11px] font-extrabold text-white shadow-xs transition hover:brightness-110"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span>Vice City 3D</span>
+            <span>Mundo 3D</span>
           </button>
-          <div className="hidden items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 2xl:flex">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span>PYG / USD</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setCommandSearchOpen(true)}
+            title="Búsqueda instantánea (Ctrl+K)"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300/80 bg-white/85 px-2.5 py-1 text-[11px] font-bold text-slate-700 transition hover:border-[#0067c0] hover:text-[#0067c0]"
+          >
+            <Search className="h-3.5 w-3.5 text-[#0067c0]" />
+            <span>Buscar</span>
+            <kbd className="hidden rounded bg-slate-100 px-1 py-0.5 font-mono text-[9.5px] text-slate-500 xl:inline">
+              Ctrl+K
+            </kbd>
+          </button>
           <button
             type="button"
             onClick={() => setForceViewMode("mobile")}

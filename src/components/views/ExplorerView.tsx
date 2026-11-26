@@ -1261,7 +1261,23 @@ export function ExplorerView({ isMobile = false }: { isMobile?: boolean }) {
                 )}
               </div>
 
-              {listings.length === 0 && !loadingListings ? (
+              {loadingListings && listings.length === 0 ? (
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="overflow-hidden rounded-xl border border-slate-200/80 bg-white"
+                    >
+                      <div className="skeleton-shimmer aspect-[4/3] w-full" />
+                      <div className="space-y-2 p-3">
+                        <div className="skeleton-shimmer h-4 w-24 rounded-md" />
+                        <div className="skeleton-shimmer h-3.5 w-full rounded-md" />
+                        <div className="skeleton-shimmer h-3 w-2/3 rounded-md" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : listings.length === 0 && !loadingListings ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
                   <p className="text-sm font-bold text-slate-800">
                     Sin resultados para esta combinación de filtros

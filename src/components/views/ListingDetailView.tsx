@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowDownRight,
   BadgeCheck,
+  BadgeDollarSign,
   CalendarClock,
   Car,
   CheckCircle2,
@@ -27,6 +28,7 @@ import {
   ShieldAlert,
   Shirt,
   ShoppingBag,
+  Sparkles,
   Star,
   Store,
   Tag,
@@ -61,10 +63,12 @@ export function ListingDetailView({
     favoriteIds,
     toggleFavorite,
     startChatForListing,
+    sendOfferForListing,
     openProfile,
     openPublish,
     openAuth,
     openCommercialStore,
+    openListingStoryCard,
     addToStoreCart,
     refreshListings,
     notifyToast,
@@ -74,6 +78,12 @@ export function ListingDetailView({
   const [loading, setLoading] = useState(true);
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Interactive Offer Composer
+  const [showOfferForm, setShowOfferForm] = useState(false);
+  const [offerAmount, setOfferAmount] = useState("");
+  const [offerNote, setOfferNote] = useState("");
+  const [sendingOffer, setSendingOffer] = useState(false);
 
   // Owner quick actions
   const [showDropPrice, setShowDropPrice] = useState(false);
@@ -828,6 +838,105 @@ export function ListingDetailView({
 
               {!isOwner && (
                 <>
+                  {!listing.isFree && listing.status === "ACTIVE" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowOfferForm((v) => !v);
+                        if (!offerAmount && listing.price > 0) {
+                          const defaultAmt =
+                            listing.currency === "PYG"
+                              ? Math.round((listing.price * 0.9) / 5000) * 5000
+                              : Math.round(listing.price * 0.9);
+                          setOfferAmount(String(defaultAmt));
+                        }
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-amber-400 bg-amber-50 py-2.5 text-sm font-extrabold text-amber-900 shadow-xs transition hover:bg-amber-100"
+                    >
+                      <BadgeDollarSign className="h-4 w-4 text-amber-600" />
+                      {showOfferForm ? "Ocultar oferta" : "Hacer una oferta"}
+                    </button>
+                  )}
+
+                  {showOfferForm && !listing.isFree && listing.status === "ACTIVE" && (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const numeric = Number(offerAmount);
+                        if (!Number.isFinite(numeric) || numeric <= 0) {
+                          notifyToast("Ingresá un monto válido", "error");
+                          return;
+                        }
+                        setSendingOffer(true);
+                        const ok = await sendOfferForListing(
+                          listing.id,
+                          numeric,
+                          listing.currency,
+                          offerNote
+                        );
+                        setSendingOffer(false);
+                        if (ok) {
+                          setShowOfferForm(false);
+                          setOfferNote("");
+                        }
+                      }}
+                      className="animate-modal-in space-y-2.5 rounded-2xl border border-amber-300 bg-amber-50/85 p-3.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-amber-950">
+                          Tu propuesta ({listing.currency})
+                        </span>
+                        <span className="text-[10.5px] font-semibold text-amber-800">
+                          Lista: {formatPrice(listing.price, listing.currency)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {[0.9, 0.85, 0.8].map((mult) => {
+                          const suggested =
+                            listing.currency === "PYG"
+                              ? Math.round((listing.price * mult) / 5000) * 5000
+                              : Math.round(listing.price * mult);
+                          const pct = Math.round((1 - mult) * 100);
+                          return (
+                            <button
+                              key={mult}
+                              type="button"
+                              onClick={() => setOfferAmount(String(suggested))}
+                              className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 transition hover:bg-amber-100"
+                            >
+                              -{pct}% ({formatPrice(suggested, listing.currency)})
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <input
+                        type="number"
+                        required
+                        min={1}
+                        value={offerAmount}
+                        onChange={(e) => setOfferAmount(e.target.value)}
+                        placeholder={`Monto en ${listing.currency}`}
+                        className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm font-extrabold text-slate-900 outline-none focus:border-amber-600"
+                      />
+                      <input
+                        type="text"
+                        value={offerNote}
+                        onChange={(e) => setOfferNote(e.target.value)}
+                        placeholder="Mensaje opcional (ej. ¿Te sirve hoy en efectivo?)"
+                        className="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs text-slate-700 outline-none focus:border-amber-600"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingOffer}
+                        className="w-full rounded-xl bg-amber-600 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {sendingOffer ? "Enviando oferta..." : "Enviar oferta al vendedor →"}
+                      </button>
+                    </form>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => startChatForListing(listing.id)}
@@ -857,7 +966,15 @@ export function ListingDetailView({
             </div>
 
             {/* Share Listing Row */}
-            <div className="mt-3.5 flex items-center gap-2 border-t border-slate-100 pt-3">
+            <div className="mt-3.5 grid grid-cols-3 gap-1.5 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => openListingStoryCard(listing)}
+                className="flex items-center justify-center gap-1 rounded-xl border border-fuchsia-200 bg-gradient-to-r from-fuchsia-50 to-cyan-50 px-2 py-2 text-[11px] font-extrabold text-fuchsia-800 transition hover:brightness-95"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-fuchsia-600" />
+                Placa Story
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -872,10 +989,10 @@ export function ListingDetailView({
                     notifyToast(targetUrl, "info");
                   }
                 }}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                className="flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] font-bold text-slate-700 transition hover:bg-slate-100"
               >
                 <Link2 className="h-3.5 w-3.5 text-[#0067c0]" />
-                Copiar enlace
+                Copiar link
               </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
@@ -887,10 +1004,10 @@ export function ListingDetailView({
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-100"
+                className="flex items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-100"
               >
                 <Share2 className="h-3.5 w-3.5" />
-                Compartir WhatsApp
+                WhatsApp
               </a>
             </div>
           </div>

@@ -13,9 +13,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Compass,
   DoorOpen,
   ExternalLink,
   Heart,
+  LayoutGrid,
   Link2,
   MapPin,
   Menu,
@@ -61,6 +63,7 @@ import {
   type TimeOfDay,
 } from "@/components/world3d/environment";
 import { ViceAudioEngine } from "@/components/world3d/audio";
+import { InteractiveCityMapModal } from "@/components/world3d/InteractiveCityMapModal";
 import { ListingDetailView } from "@/components/views/ListingDetailView";
 import { PublishView } from "@/components/views/PublishView";
 import { ChatView } from "@/components/views/ChatView";
@@ -176,6 +179,12 @@ export function ViceCityWorld({
     setExperienceMode,
     worldModal,
     setWorldModal,
+    commandSearchOpen,
+    setCommandSearchOpen,
+    worldTeleport,
+    clearWorldTeleport,
+    storyCardTarget,
+    openListingStoryCard,
     notifyToast,
   } = useApp();
 
@@ -196,6 +205,23 @@ export function ViceCityWorld({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showKioskPanel, setShowKioskPanel] = useState(false);
   const [showNpcPanel, setShowNpcPanel] = useState(false);
+  const [showCityMap, setShowCityMap] = useState(false);
+  const [showWelcomeCard, setShowWelcomeCard] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    if (initialCommercialStoreSlug || initialModal) return false;
+    try {
+      return window.localStorage.getItem("reusa_welcome_v1") !== "1";
+    } catch {
+      return true;
+    }
+  });
+
+  const dismissWelcomeCard = useCallback(() => {
+    setShowWelcomeCard(false);
+    try {
+      window.localStorage.setItem("reusa_welcome_v1", "1");
+    } catch {}
+  }, []);
 
   // Definitive Edition v3 Realism & Interactive Showroom States
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>("sunset");
@@ -219,6 +245,7 @@ export function ViceCityWorld({
   const worldModalRef = useRef<WorldModal>(worldModal);
   const showKioskRef = useRef<boolean>(false);
   const showNpcRef = useRef<boolean>(false);
+  const showCityMapRef = useRef<boolean>(false);
   const inspectedSpotRef = useRef<InspectedStandState | null>(null);
   const timeOfDayRef = useRef<TimeOfDay>("sunset");
   const qualityRef = useRef<GraphicsQuality>(quality);
@@ -268,11 +295,26 @@ export function ViceCityWorld({
     worldModalRef.current = worldModal;
     showKioskRef.current = showKioskPanel;
     showNpcRef.current = showNpcPanel;
+    showCityMapRef.current = showCityMap;
     inspectedSpotRef.current = inspectedSpot;
     modalOpenRef.current = Boolean(
-      worldModal || showKioskPanel || showNpcPanel || inspectedSpot
+      worldModal ||
+        showKioskPanel ||
+        showNpcPanel ||
+        showCityMap ||
+        inspectedSpot ||
+        commandSearchOpen ||
+        storyCardTarget
     );
-  }, [worldModal, showKioskPanel, showNpcPanel, inspectedSpot]);
+  }, [
+    worldModal,
+    showKioskPanel,
+    showNpcPanel,
+    showCityMap,
+    inspectedSpot,
+    commandSearchOpen,
+    storyCardTarget,
+  ]);
 
   useEffect(() => {
     mobileSprintRef.current = mobileSprint;
@@ -716,6 +758,42 @@ export function ViceCityWorld({
     }, 150);
   }, [snapCameraBehindPlayer]);
 
+  const teleportToPier = useCallback(() => {
+    setTransitioning(true);
+    setShowKioskPanel(false);
+    setShowNpcPanel(false);
+    setShowCityMap(false);
+    inspectedSpotRef.current = null;
+    setInspectedSpot(null);
+    if (drivenCarIdRef.current) exitCar();
+
+    setTimeout(() => {
+      activeStoreRef.current = null;
+      activeCommercialRef.current = null;
+      setActiveStoreSlug(null);
+      setActiveCommercialSlug(null);
+      playerPosRef.current.set(0, 0, -76);
+      playerVelYRef.current = 0;
+      playerYawRef.current = Math.PI;
+      camYawRef.current = 0;
+      snapCameraBehindPlayer(false);
+      notifyToast("Teletransportado al Muelle y Playa Vice", "info");
+      setTimeout(() => setTransitioning(false), 180);
+    }, 120);
+  }, [exitCar, notifyToast, snapCameraBehindPlayer]);
+
+  useEffect(() => {
+    if (!worldTeleport) return;
+    if (worldTeleport.kind === "commercial") {
+      enterCommercialStore(worldTeleport.slug);
+    } else if (worldTeleport.kind === "category") {
+      enterStore(worldTeleport.slug);
+    } else if (worldTeleport.kind === "pier") {
+      teleportToPier();
+    }
+    clearWorldTeleport();
+  }, [worldTeleport, clearWorldTeleport, enterCommercialStore, enterStore, teleportToPier]);
+
   const triggerPromptAction = useCallback(() => {
     const p = promptRef.current;
     if (!p) return;
@@ -996,6 +1074,7 @@ export function ViceCityWorld({
 
       if (e.key === "Escape") {
         if (worldModalRef.current) setWorldModal(null);
+        else if (showCityMapRef.current) setShowCityMap(false);
         else if (inspectedSpotRef.current) closeStandInspection();
         else if (showKioskRef.current) setShowKioskPanel(false);
         else if (showNpcRef.current) setShowNpcPanel(false);
@@ -1005,6 +1084,13 @@ export function ViceCityWorld({
       }
 
       if (isTyping) return;
+
+      const lowerPre = e.key.toLowerCase();
+      if (lowerPre === "m" && !worldModalRef.current && !inspectedSpotRef.current) {
+        e.preventDefault();
+        setShowCityMap((v) => !v);
+        return;
+      }
 
       if (inspectedSpotRef.current && !worldModalRef.current) {
         if (e.key === "ArrowLeft") {
@@ -1663,10 +1749,10 @@ export function ViceCityWorld({
       <header className="pointer-events-none fixed inset-x-2.5 top-2.5 z-20 flex items-start justify-between gap-2 md:inset-x-3.5 md:top-3">
         {/* LEFT CLUSTER */}
         <div className="pointer-events-auto flex items-center gap-1.5 md:gap-2">
-          <div className="flex items-center gap-1.5 rounded-xl border border-[#ff4fd8]/40 bg-[#120926]/85 px-2.5 py-1.5 text-white shadow-lg backdrop-blur-md md:rounded-2xl md:px-3">
+          <div className="flex items-center gap-1.5 rounded-xl border border-[#ff4fd8]/40 bg-[#120926]/85 px-2 py-1.5 text-white shadow-lg backdrop-blur-md md:rounded-2xl md:px-3">
             <img src="/icons/icon.svg" alt="ReUsa PY" className="h-5 w-5 rounded-md md:h-6 md:w-6" />
             <div className="leading-none">
-              <span className="bg-gradient-to-r from-[#00f0ff] via-white to-[#ff4fd8] bg-clip-text text-xs font-black italic tracking-tight text-transparent md:text-sm">
+              <span className="bg-gradient-to-r from-[#00f0ff] via-white to-[#ff4fd8] bg-clip-text text-[11px] font-black italic tracking-tight text-transparent md:text-sm">
                 REUSA VICE
               </span>
               <span className="hidden text-[9px] font-semibold tracking-wider text-cyan-200/80 md:block">
@@ -1675,13 +1761,34 @@ export function ViceCityWorld({
             </div>
           </div>
 
+          {/* Instant Search Trigger — Compact Lupa on Mobile, Floating Pill + Ctrl+K on Desktop */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowMobileMenu(false);
+              setShowStoreMenu(false);
+              setCommandSearchOpen(true);
+            }}
+            aria-label="Buscar avisos y tiendas"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#00f0ff]/55 bg-[#120926]/88 px-2.5 text-xs font-bold text-cyan-100 shadow-lg backdrop-blur-md transition hover:border-[#00f0ff] hover:bg-cyan-500/20 hover:text-white md:px-3"
+          >
+            <Search className="h-3.5 w-3.5 text-[#00f0ff]" />
+            <span className="hidden xl:inline">Buscar avisos, marcas...</span>
+            <span className="hidden md:inline xl:hidden">Buscar</span>
+            <kbd className="hidden rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-cyan-200 lg:inline">
+              Ctrl+K
+            </kbd>
+          </button>
+
+          {/* Clear 3D ↔ Catálogo Switcher */}
           <button
             type="button"
             onClick={() => setExperienceMode("classic")}
-            className="hidden items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-[#120926]/85 px-3 py-2 text-xs font-bold text-cyan-200 shadow-lg backdrop-blur-md transition hover:bg-cyan-500/20 hover:text-white md:inline-flex"
+            title="Cambiar a vista Catálogo / Lista rápida"
+            className="hidden items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-[#120926]/85 px-2.5 py-2 text-xs font-bold text-cyan-200 shadow-lg backdrop-blur-md transition hover:bg-cyan-500/20 hover:text-white md:inline-flex"
           >
-            <Monitor className="h-3.5 w-3.5" />
-            <span>Vista Windows OS</span>
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span>Catálogo</span>
           </button>
 
           <button
@@ -1690,7 +1797,7 @@ export function ViceCityWorld({
               setShowMobileMenu(false);
               setShowStoreMenu((v) => !v);
             }}
-            className="inline-flex items-center gap-1 rounded-xl border border-[#ff4fd8]/50 bg-[#120926]/85 px-2.5 py-2 text-[11px] font-bold text-pink-200 shadow-lg backdrop-blur-md transition hover:bg-[#ff2a9d]/25 hover:text-white md:gap-1.5 md:px-3 md:text-xs"
+            className="inline-flex items-center gap-1 rounded-xl border border-[#ff4fd8]/50 bg-[#120926]/85 px-2 py-2 text-[11px] font-bold text-pink-200 shadow-lg backdrop-blur-md transition hover:bg-[#ff2a9d]/25 hover:text-white md:gap-1.5 md:px-2.5 md:text-xs"
           >
             <Store className="h-3.5 w-3.5" />
             <span>Tiendas</span>
@@ -1698,25 +1805,19 @@ export function ViceCityWorld({
 
           <button
             type="button"
-            onClick={() => setShowKioskPanel((v) => !v)}
-            className={`hidden items-center gap-1 rounded-xl border px-2.5 py-2 text-xs font-bold shadow-lg backdrop-blur-md transition md:inline-flex ${
-              showKioskPanel ||
-              filters.q ||
-              filters.department ||
-              filters.subcategory ||
-              filters.minSavings
-                ? "border-emerald-400 bg-emerald-500/25 text-emerald-100"
-                : "border-white/20 bg-[#120926]/85 text-slate-200 hover:bg-white/15"
-            }`}
+            onClick={() => setShowCityMap(true)}
+            title="Abrir Mapa 2D interactivo (Tecla M)"
+            className="hidden items-center gap-1 rounded-xl border border-white/20 bg-[#120926]/85 px-2.5 py-2 text-xs font-bold text-slate-200 shadow-lg backdrop-blur-md transition hover:border-[#00f0ff]/60 hover:bg-white/15 hover:text-white lg:inline-flex"
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span>Filtrar PY</span>
+            <Compass className="h-3.5 w-3.5 text-[#00f0ff]" />
+            <span>Mapa</span>
+            <kbd className="rounded bg-white/10 px-1 font-mono text-[9.5px] text-cyan-200">M</kbd>
           </button>
 
           <button
             type="button"
             onClick={() => setWorldModal({ kind: "rentStore" })}
-            className="hidden items-center gap-1 rounded-xl border border-amber-400/60 bg-amber-500/20 px-2.5 py-2 text-xs font-extrabold text-amber-200 shadow-lg backdrop-blur-md transition hover:bg-amber-500/35 hover:text-white lg:inline-flex"
+            className="hidden items-center gap-1 rounded-xl border border-amber-400/60 bg-amber-500/20 px-2.5 py-2 text-xs font-extrabold text-amber-200 shadow-lg backdrop-blur-md transition hover:bg-amber-500/35 hover:text-white xl:inline-flex"
           >
             <Sparkles className="h-3.5 w-3.5" />
             <span>Tu Marca Aquí</span>
@@ -1750,7 +1851,7 @@ export function ViceCityWorld({
             type="button"
             onClick={() => setWorldModal(user ? { kind: "chat" } : { kind: "auth" })}
             className="relative hidden h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-[#120926]/85 text-cyan-200 shadow-lg backdrop-blur-md hover:bg-white/15 md:flex"
-            title="Mensajes"
+            title="Mensajes y Ofertas"
           >
             <MessageCircle className="h-4 w-4" />
             {unreadChatCount > 0 && (
@@ -1868,6 +1969,23 @@ export function ViceCityWorld({
           {soundEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
           <span>{soundEnabled ? "Audio ON" : "Audio OFF"}</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setShowKioskPanel((v) => !v)}
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-[11px] font-bold shadow-md backdrop-blur-md transition ${
+            showKioskPanel ||
+            filters.q ||
+            filters.department ||
+            filters.subcategory ||
+            filters.minSavings
+              ? "border-emerald-400 bg-emerald-500/25 text-emerald-100"
+              : "border-white/15 bg-[#120926]/80 text-slate-300 hover:bg-white/15 hover:text-white"
+          }`}
+        >
+          <SlidersHorizontal className="h-3 w-3" />
+          <span>Filtrar PY</span>
+        </button>
       </div>
 
       {/* SECOND ROW: Clean Centered Zone / Speedometer / Brand Showroom Pill */}
@@ -1937,12 +2055,12 @@ export function ViceCityWorld({
         </div>
       </div>
 
-      {/* MOBILE COMPACT TAPPABLE MINI-RADAR */}
-      {isMobileViewport && !anyOverlayOpen && !showStoreMenu && !showMobileMenu && (
+      {/* MOBILE COMPACT TAPPABLE MINI-RADAR (opens 2D Interactive City Map) */}
+      {isMobileViewport && !anyOverlayOpen && !showStoreMenu && !showMobileMenu && !showCityMap && (
         <button
           type="button"
-          onClick={() => setShowStoreMenu(true)}
-          aria-label="Abrir mapa de tiendas"
+          onClick={() => setShowCityMap(true)}
+          aria-label="Abrir mapa interactivo 2D"
           className="fixed left-2.5 top-[92px] z-20 h-14 w-14 overflow-hidden rounded-full border-2 border-[#00f0ff]/80 bg-[#180d30]/88 shadow-[0_0_16px_rgba(0,240,255,0.28)] backdrop-blur-md active:scale-95 md:hidden"
         >
           <div className="absolute inset-x-0 top-0 h-2.5 bg-cyan-500/50" />
@@ -2094,11 +2212,22 @@ export function ViceCityWorld({
               type="button"
               onClick={() => {
                 setShowMobileMenu(false);
+                setShowCityMap(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl bg-fuchsia-500/20 px-3 py-2.5 text-fuchsia-100"
+            >
+              <Compass className="h-4 w-4 text-[#00f0ff]" /> Mapa 2D Interactivo
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowMobileMenu(false);
                 setExperienceMode("classic");
               }}
               className="flex w-full items-center gap-2.5 rounded-xl bg-cyan-500/20 px-3 py-2.5 text-cyan-200"
             >
-              <Smartphone className="h-4 w-4" /> Cambiar a Vista App Clásica
+              <LayoutGrid className="h-4 w-4" /> Cambiar a Catálogo Rápido
             </button>
             <button
               type="button"
@@ -2314,9 +2443,9 @@ export function ViceCityWorld({
           ) : (
             <button
               type="button"
-              onClick={() => setShowStoreMenu((v) => !v)}
-              title="Radar Vice City — Clic para ver Tiendas Oficiales y Categorías"
-              className="group relative h-32 w-32 overflow-hidden rounded-full border-[3px] border-[#00f0ff]/80 bg-[#180d30]/90 shadow-[0_0_24px_rgba(0,240,255,0.28)] backdrop-blur-md"
+              onClick={() => setShowCityMap(true)}
+              title="Radar Vice City — Clic o [M] para abrir el Mapa 2D interactivo"
+              className="group relative h-32 w-32 overflow-hidden rounded-full border-[3px] border-[#00f0ff]/80 bg-[#180d30]/90 shadow-[0_0_24px_rgba(0,240,255,0.28)] backdrop-blur-md transition hover:scale-[1.04] hover:border-white hover:shadow-[0_0_32px_rgba(0,240,255,0.55)]"
             >
               <div className="absolute inset-x-0 top-0 h-4 bg-cyan-500/45" />
               <div className="absolute left-1/2 top-0 h-5 w-2.5 -translate-x-1/2 bg-amber-700/80" />
@@ -2370,8 +2499,8 @@ export function ViceCityWorld({
                 className="absolute h-0 w-0 border-x-[5px] border-b-[11px] border-x-transparent border-b-white drop-shadow-[0_0_4px_#00f0ff]"
               />
 
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded bg-black/60 px-1.5 text-[9px] font-bold tracking-wider text-cyan-200">
-                N ↑ RADAR
+              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-black/75 px-1.5 py-0.5 text-[8.5px] font-extrabold tracking-wider text-cyan-200 group-hover:bg-[#00f0ff] group-hover:text-slate-950">
+                M · MAPA 2D
               </span>
             </button>
           )}
@@ -2554,6 +2683,15 @@ export function ViceCityWorld({
                 </button>
                 <button
                   type="button"
+                  onClick={() => openListingStoryCard(inspectedSpot.listing)}
+                  title="Descargar placa 9:16 para WhatsApp / IG Story"
+                  className="inline-flex h-9 items-center gap-1 rounded-xl bg-gradient-to-r from-[#ff2a9d] to-fuchsia-600 px-2.5 text-xs font-extrabold text-white shadow-sm hover:brightness-110"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Story</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleShareListing(inspectedSpot.listing)}
                   title="Copiar enlace para compartir"
                   className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-cyan-200 hover:bg-cyan-500/30"
@@ -2574,7 +2712,7 @@ export function ViceCityWorld({
                   className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00f0ff] to-[#38bdf8] px-3.5 text-xs font-black text-slate-950 shadow-md hover:brightness-110"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  <span>Ficha / Chat</span>
+                  <span>Ficha / Ofertar</span>
                 </button>
               </div>
             </div>
@@ -2583,10 +2721,64 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
-      {/* BOTTOM-CENTER: CONTEXTUAL INTERACTIVE PROMPT                      */}
+      {/* BOTTOM-CENTER: CONTEXTUAL INTERACTIVE PROMPT & WELCOME CARD       */}
       {/* ================================================================= */}
       {!inspectedSpot && (
         <div className="pointer-events-none fixed inset-x-3 bottom-[122px] z-20 flex flex-col items-center gap-2 md:bottom-4">
+          {/* Sleek First-Visit Welcome Onboarding Card (Dismissible in 1 Click) */}
+          {showWelcomeCard && !prompt && !anyOverlayOpen && !drivingCar && !isInsideAnyStore && (
+            <div className="animate-sheet-up pointer-events-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#00f0ff]/45 bg-[#110826]/92 px-3.5 py-2.5 text-white shadow-[0_12px_34px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-black tracking-tight text-cyan-200">
+                  ✨ ¡Bienvenido a ReUsa PY 3D!
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-slate-200">
+                  Entrá a cualquier tienda o local oficial, hacé ofertas directas o cambiá al Catálogo clásico.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissWelcomeCard();
+                    setCommandSearchOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-xl bg-[#00f0ff] px-2.5 py-1.5 text-[11px] font-black text-slate-950 transition hover:brightness-110"
+                >
+                  <Search className="h-3 w-3" /> Buscar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissWelcomeCard();
+                    setShowCityMap(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/20"
+                >
+                  <Compass className="h-3 w-3 text-[#00f0ff]" /> Mapa 2D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissWelcomeCard();
+                    setExperienceMode("classic");
+                  }}
+                  className="hidden items-center gap-1 rounded-xl border border-white/20 bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-white/20 sm:inline-flex"
+                >
+                  <LayoutGrid className="h-3 w-3" /> Catálogo
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissWelcomeCard}
+                  aria-label="Cerrar bienvenida"
+                  className="rounded-xl bg-white/10 p-1.5 text-slate-300 transition hover:bg-rose-500 hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {prompt && !anyOverlayOpen && !drivingCar && (
             <div className="pointer-events-auto flex max-w-md items-center gap-2 rounded-2xl border-2 border-[#00f0ff] bg-[#120926]/92 px-3 py-2 text-left text-white shadow-[0_0_26px_rgba(0,240,255,0.38)] backdrop-blur-lg">
               <button
@@ -2754,15 +2946,15 @@ export function ViceCityWorld({
                 </span>
                 <span>·</span>
                 <span>
-                  <strong className="text-emerald-300">Espacio</strong> Saltar
+                  <strong className="text-amber-300">F</strong> Auto
                 </span>
                 <span>·</span>
                 <span>
-                  <strong className="text-amber-300">F</strong> Subir al auto
+                  <strong className="text-emerald-300">M</strong> Mapa 2D
                 </span>
                 <span>·</span>
                 <span>
-                  <strong className="text-sky-300">Clic</strong> Entrar / Inspeccionar 3D
+                  <strong className="text-sky-300">Ctrl+K</strong> Buscar
                 </span>
               </>
             )}
@@ -3128,6 +3320,24 @@ export function ViceCityWorld({
       )}
 
       {/* ================================================================= */}
+      {/* INTERACTIVE 2D AERIAL CITY MAP MODAL (Click Mini-Radar or Press M)*/}
+      {/* ================================================================= */}
+      <InteractiveCityMapModal
+        open={showCityMap}
+        onClose={() => setShowCityMap(false)}
+        playerX={radarState.x}
+        playerZ={radarState.z}
+        playerYaw={radarState.yaw}
+        commercialStores={commercialStores}
+        listingCountByCategory={listingCountByCategory}
+        listingCountByStore={listingCountByStore}
+        onTeleportCategory={(slug) => enterStore(slug)}
+        onTeleportCommercial={(slug) => enterCommercialStore(slug)}
+        onTeleportPier={teleportToPier}
+        onOpenRentStore={() => setWorldModal({ kind: "rentStore" })}
+      />
+
+      {/* ================================================================= */}
       {/* FLOATING REAL MARKETPLACE & COMMERCIAL STORE MODAL OVER 3D WORLD  */}
       {/* ================================================================= */}
       {worldModal && (
@@ -3137,7 +3347,7 @@ export function ViceCityWorld({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="flex h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#00f0ff]/40 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
+            className="animate-modal-in flex h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#00f0ff]/40 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
           >
             <div className="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#160b2e] via-[#271147] to-[#11243b] px-4 text-white">
               <div className="flex min-w-0 items-center gap-2">
@@ -3150,7 +3360,7 @@ export function ViceCityWorld({
                   {worldModal.kind === "merchantDashboard" && "Mi Tienda Oficial — Panel de Gestión"}
                   {worldModal.kind === "publish" &&
                     (worldModal.editId ? "Editar publicación" : "Publicar en ReUsa PY")}
-                  {worldModal.kind === "chat" && "Mensajes — ReUsa PY"}
+                  {worldModal.kind === "chat" && "Mensajes y Ofertas — ReUsa PY"}
                   {worldModal.kind === "favorites" && "Favoritos y Alertas"}
                   {worldModal.kind === "profile" && "Perfil y Reputación"}
                   {worldModal.kind === "auth" && "Ingresar a ReUsa PY"}

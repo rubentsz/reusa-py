@@ -46,6 +46,7 @@ export function MerchantDashboardView({
     departments,
     refreshCommercialStores,
     refreshListings,
+    openStoreStoryCard,
     notifyToast,
   } = useApp();
 
@@ -430,6 +431,13 @@ export function MerchantDashboardView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openStoreStoryCard(activeStore, catalog)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#ff2a9d] to-fuchsia-600 px-3 py-1.5 text-xs font-extrabold text-white shadow-xs hover:brightness-110"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Placa IG / WhatsApp
+            </button>
             <button
               type="button"
               onClick={() => {

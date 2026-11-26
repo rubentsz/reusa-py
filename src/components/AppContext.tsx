@@ -181,11 +181,41 @@ interface AppContextValue {
   openMerchantDashboard: (storeId?: string) => void;
   openExplorerWithFilters: (patch: Partial<ListingFilters>, resetFirst?: boolean) => void;
   startChatForListing: (listingId: string) => Promise<void>;
+  sendOfferForListing: (
+    listingId: string,
+    offerAmount: number,
+    offerCurrency: "PYG" | "USD",
+    note?: string
+  ) => Promise<boolean>;
+
+  // Global Instant Search (Ctrl+K) & 3D Teleport bridge
+  commandSearchOpen: boolean;
+  setCommandSearchOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  worldTeleport: WorldTeleportTarget;
+  requestWorldTeleport: (target: NonNullable<WorldTeleportTarget>) => void;
+  clearWorldTeleport: () => void;
+
+  // Global WhatsApp / IG Story Card Generator
+  storyCardTarget: StoryCardTarget;
+  setStoryCardTarget: React.Dispatch<React.SetStateAction<StoryCardTarget>>;
+  openListingStoryCard: (listing: ListingDTO) => void;
+  openStoreStoryCard: (store: CommercialStoreDTO, catalog: ListingDTO[]) => void;
 
   // Toasts
   toasts: ToastItem[];
   notifyToast: (message: string, tone?: "info" | "success" | "error") => void;
 }
+
+export type StoryCardTarget =
+  | { kind: "listing"; listing: ListingDTO }
+  | { kind: "store"; store: CommercialStoreDTO; catalog: ListingDTO[] }
+  | null;
+
+export type WorldTeleportTarget =
+  | { kind: "category"; slug: string; ts?: number }
+  | { kind: "commercial"; slug: string; ts?: number }
+  | { kind: "pier"; ts?: number }
+  | null;
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -296,6 +326,20 @@ export function AppProvider({
 
   const [experienceMode, setExperienceMode] = useState<"world3d" | "classic">("world3d");
   const [worldModal, setWorldModal] = useState<AppWorldModal>(null);
+  const [commandSearchOpen, setCommandSearchOpen] = useState<boolean>(false);
+  const [worldTeleport, setWorldTeleport] = useState<WorldTeleportTarget>(null);
+  const [storyCardTarget, setStoryCardTarget] = useState<StoryCardTarget>(null);
+
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onGlobalKey);
+    return () => window.removeEventListener("keydown", onGlobalKey);
+  }, []);
 
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(false);
   const [forceViewMode, setForceViewMode] = useState<"auto" | "desktop" | "mobile">("auto");
@@ -1081,6 +1125,62 @@ export function AppProvider({
     [notifyToast, openAuth, openChat, refreshConversations, user]
   );
 
+  const sendOfferForListing = useCallback(
+    async (
+      listingId: string,
+      offerAmount: number,
+      offerCurrency: "PYG" | "USD",
+      note?: string
+    ): Promise<boolean> => {
+      if (!user) {
+        notifyToast("Iniciá sesión para enviar tu oferta al vendedor", "info");
+        openAuth();
+        return false;
+      }
+      try {
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            listingId,
+            offerAmount,
+            offerCurrency,
+            initialMessage: note?.trim() || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          notifyToast(data.error || "No se pudo enviar la oferta", "error");
+          return false;
+        }
+        await refreshConversations();
+        notifyToast("¡Oferta enviada! Te llevamos al chat para seguir la negociación.", "success");
+        openChat(data.conversationId);
+        return true;
+      } catch {
+        notifyToast("Error enviando oferta", "error");
+        return false;
+      }
+    },
+    [notifyToast, openAuth, openChat, refreshConversations, user]
+  );
+
+  const requestWorldTeleport = useCallback((target: NonNullable<WorldTeleportTarget>) => {
+    setWorldTeleport({ ...target, ts: Date.now() });
+  }, []);
+
+  const clearWorldTeleport = useCallback(() => {
+    setWorldTeleport(null);
+  }, []);
+
+  const openListingStoryCard = useCallback((listing: ListingDTO) => {
+    setStoryCardTarget({ kind: "listing", listing });
+  }, []);
+
+  const openStoreStoryCard = useCallback((store: CommercialStoreDTO, catalog: ListingDTO[]) => {
+    setStoryCardTarget({ kind: "store", store, catalog });
+  }, []);
+
   const value = useMemo<AppContextValue>(
     () => ({
       user,
@@ -1150,6 +1250,16 @@ export function AppProvider({
       openMerchantDashboard,
       openExplorerWithFilters,
       startChatForListing,
+      sendOfferForListing,
+      commandSearchOpen,
+      setCommandSearchOpen,
+      worldTeleport,
+      requestWorldTeleport,
+      clearWorldTeleport,
+      storyCardTarget,
+      setStoryCardTarget,
+      openListingStoryCard,
+      openStoreStoryCard,
       toasts,
       notifyToast,
     }),
@@ -1214,6 +1324,14 @@ export function AppProvider({
       openMerchantDashboard,
       openExplorerWithFilters,
       startChatForListing,
+      sendOfferForListing,
+      commandSearchOpen,
+      worldTeleport,
+      requestWorldTeleport,
+      clearWorldTeleport,
+      storyCardTarget,
+      openListingStoryCard,
+      openStoreStoryCard,
       toasts,
       notifyToast,
     ]
