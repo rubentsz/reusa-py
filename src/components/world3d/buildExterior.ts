@@ -6,6 +6,7 @@ import {
   createNeonSignTexture,
   createPalmFrondTexture,
   createSidewalkTexture,
+  createSoftGlowTexture,
   createStuccoBumpTexture,
 } from "@/components/world3d/textures";
 import { createRealisticOcean, type OceanShaderHandle } from "@/components/world3d/oceanShader";
@@ -270,15 +271,15 @@ function createSculpted80sSupercar(id: string, name: string, bodyColor: number):
     bodyGroup.add(pipe);
   }
 
-  // Front headlights + additive light cones on asphalt
+  // Front headlights + soft additive volumetric beams (visible at night)
   const headlightCones: THREE.Mesh[] = [];
-  const coneGeo = new THREE.ConeGeometry(1.15, 5.2, 14, 1, true);
+  const coneGeo = new THREE.ConeGeometry(0.85, 3.6, 12, 1, true);
   coneGeo.rotateX(-Math.PI / 2);
-  coneGeo.translate(0, 0, 2.6);
+  coneGeo.translate(0, 0, 1.8);
   const coneMat = new THREE.MeshBasicMaterial({
-    color: 0xfff3c4,
+    color: 0xffe4a0,
     transparent: true,
-    opacity: 0.12,
+    opacity: 0.075,
     depthWrite: false,
     side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
@@ -291,7 +292,8 @@ function createSculpted80sSupercar(id: string, name: string, bodyColor: number):
 
     const cone = new THREE.Mesh(coneGeo, coneMat);
     cone.position.set(hx, 0.52, 2.42);
-    cone.rotation.x = 0.08;
+    cone.rotation.x = 0.09;
+    cone.visible = false;
     bodyGroup.add(cone);
     headlightCones.push(cone);
   }
@@ -639,13 +641,13 @@ export function buildViceExterior(
     palmTrees.push(palm);
   });
 
-  // Art-Deco Streetlamps with glowing pools on the sidewalk
+  // Art-Deco Streetlamps with soft radial glowing pools on the sidewalk
   const poleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.8, roughness: 0.25 });
   const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe4b5 });
   const glowPoolMat = new THREE.MeshBasicMaterial({
-    color: 0xffd27d,
+    map: createSoftGlowTexture(),
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.45,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -661,9 +663,9 @@ export function buildViceExterior(
       lamp.add(globe);
       group.add(lamp);
 
-      const pool = new THREE.Mesh(new THREE.CircleGeometry(2.6, 18), glowPoolMat);
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 5.6), glowPoolMat);
       pool.rotation.x = -Math.PI / 2;
-      pool.position.set(lx, 0.18, lz);
+      pool.position.set(lx, 0.19, lz);
       group.add(pool);
       lampGlowPools.push(pool);
     }
@@ -1016,10 +1018,11 @@ export function buildViceExterior(
       oceanHandle.setColors(cfg.oceanShallow, cfg.oceanDeep, cfg.oceanSpecColor, cfg.sunPos);
 
       const lampVisible = mode !== "day";
+      glowPoolMat.opacity = mode === "night" ? 0.78 : 0.36;
       for (const pool of lampGlowPools) pool.visible = lampVisible;
       for (const car of cars) {
         car.headlightCones.forEach((c) => {
-          c.visible = mode !== "day";
+          c.visible = mode === "night";
         });
       }
     },

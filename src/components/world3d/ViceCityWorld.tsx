@@ -751,9 +751,9 @@ export function ViceCityWorld({
     const renderPass = new RenderPass(scene, camera);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(wInit, hInit),
-      0.34, // subtle vibrant neon glow without washing out photos
-      0.42,
-      0.86
+      0.2,
+      0.35,
+      0.94
     );
     const outputPass = new OutputPass();
     composer.addPass(renderPass);

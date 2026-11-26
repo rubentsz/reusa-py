@@ -109,13 +109,13 @@ export function buildSculptedHuman(opts: {
   chest.castShadow = true;
   torsoGroup.add(chest);
 
-  // Rounded shoulder caps
-  const shoulderGeo = new THREE.SphereGeometry(0.135, 10, 10);
+  // Rounded shoulder caps tucked naturally into torso & sleeves
+  const shoulderGeo = new THREE.SphereGeometry(0.105, 10, 10);
   const shL = new THREE.Mesh(shoulderGeo, shirtMat);
-  shL.position.set(-0.33, 0.3, 0);
+  shL.position.set(-0.285, 0.27, 0);
   torsoGroup.add(shL);
   const shR = shL.clone();
-  shR.position.x = 0.33;
+  shR.position.x = 0.285;
   torsoGroup.add(shR);
 
   // Open shirt V-neck collar + subtle chest skin
@@ -166,27 +166,27 @@ export function buildSculptedHuman(opts: {
   // Sculpted articulated arms (short sleeve + tanned forearm + rounded hand)
   const makeArm = (xOffset: number) => {
     const armPivot = new THREE.Group();
-    armPivot.position.set(xOffset, 0.3, 0);
+    armPivot.position.set(xOffset, 0.27, 0);
 
-    const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.095, 0.16, 6, 10), shirtMat);
+    const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.088, 0.16, 6, 10), shirtMat);
     sleeve.position.y = -0.12;
     sleeve.castShadow = true;
     armPivot.add(sleeve);
 
-    const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.072, 0.26, 6, 10), skinMat);
-    forearm.position.y = -0.38;
+    const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.068, 0.26, 6, 10), skinMat);
+    forearm.position.y = -0.37;
     forearm.castShadow = true;
     armPivot.add(forearm);
 
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), skinMat);
-    hand.position.y = -0.56;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.072, 8, 8), skinMat);
+    hand.position.y = -0.55;
     armPivot.add(hand);
 
     return armPivot;
   };
 
-  const leftArm = makeArm(-0.37);
-  const rightArm = makeArm(0.37);
+  const leftArm = makeArm(-0.34);
+  const rightArm = makeArm(0.34);
   torsoGroup.add(leftArm, rightArm);
   group.add(torsoGroup);
 

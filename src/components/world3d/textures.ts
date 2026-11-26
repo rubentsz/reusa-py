@@ -525,3 +525,19 @@ export function applyImageUrlToMaterial(mat: THREE.MeshStandardMaterial, url: st
     () => {}
   );
 }
+
+export function createSoftGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 64);
+  grad.addColorStop(0.0, "rgba(255, 224, 150, 0.72)");
+  grad.addColorStop(0.45, "rgba(255, 200, 120, 0.28)");
+  grad.addColorStop(1.0, "rgba(255, 200, 120, 0.0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
