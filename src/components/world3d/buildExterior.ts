@@ -571,30 +571,30 @@ export function buildViceExterior(
     roughness: 0.25,
   });
   const archGoldMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
-  for (const ax of [-12.2, 12.2]) {
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 8.6, 10), archPillarMat);
-    pillar.position.set(ax, 4.3, 0);
+  for (const ax of [-9.4, 9.4]) {
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 7.6, 10), archPillarMat);
+    pillar.position.set(ax, 3.8, 0);
     archGroup.add(pillar);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.06, 8, 16), archGoldMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.06, 8, 16), archGoldMat);
     ring.rotation.x = Math.PI / 2;
-    ring.position.set(ax, 7.6, 0);
+    ring.position.set(ax, 6.65, 0);
     archGroup.add(ring);
   }
   const archTex = createAvenidaMarcasArchTexture();
-  const archFrame = new THREE.Mesh(new THREE.BoxGeometry(24.8, 2.35, 0.38), archPillarMat);
-  archFrame.position.set(0, 8.2, 0);
+  const archFrame = new THREE.Mesh(new THREE.BoxGeometry(19.2, 1.95, 0.36), archPillarMat);
+  archFrame.position.set(0, 7.2, 0);
   archGroup.add(archFrame);
   const archFront = new THREE.Mesh(
-    new THREE.PlaneGeometry(24.0, 2.05),
+    new THREE.PlaneGeometry(18.5, 1.68),
     new THREE.MeshBasicMaterial({ map: archTex })
   );
-  archFront.position.set(0, 8.2, 0.21);
+  archFront.position.set(0, 7.2, 0.2);
   archGroup.add(archFront);
   const archBack = new THREE.Mesh(
-    new THREE.PlaneGeometry(24.0, 2.05),
+    new THREE.PlaneGeometry(18.5, 1.68),
     new THREE.MeshBasicMaterial({ map: archTex })
   );
-  archBack.position.set(0, 8.2, -0.21);
+  archBack.position.set(0, 7.2, -0.2);
   archBack.rotation.y = Math.PI;
   archGroup.add(archBack);
   group.add(archGroup);
@@ -716,7 +716,7 @@ export function buildViceExterior(
     [22, -74],
   ];
   for (let pz = 62; pz <= southEndZ - 6; pz += 20) {
-    palmPositions.push([-7.1, pz], [7.1, pz]);
+    palmPositions.push([-8.9, pz], [8.9, pz]);
   }
   palmPositions.forEach(([px, pz], idx) => {
     const palm = createRealisticPalmTree(idx + 1.3, palmFrondGeo, palmFrondMat);
@@ -735,9 +735,13 @@ export function buildViceExterior(
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  for (let lz = southEndZ - 10; lz >= -56; lz -= 20) {
-    if (Math.abs(lz - 42) < 3) continue; // Keep archway clean
-    for (const lx of [-6.7, 6.7]) {
+  const lampZs: number[] = [22, 2, -18, -38, -58];
+  for (let lz = 62; lz <= southEndZ - 8; lz += 20) {
+    lampZs.push(lz);
+  }
+  for (const lz of lampZs) {
+    const lxAbs = lz >= 50 ? 10.6 : 6.7; // Set back in courtyard gaps on Avenida de Marcas so store logos stay 100% clear
+    for (const lx of [-lxAbs, lxAbs]) {
       const lamp = new THREE.Group();
       lamp.position.set(lx, 0.16, lz);
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 5.4, 10), poleMat);

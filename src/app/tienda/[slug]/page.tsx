@@ -17,10 +17,10 @@ export async function generateMetadata({
       include: { city: { select: { name: true } } },
     });
     if (!store) {
-      return { title: "Tienda Oficial — ReUsa PY" };
+      return { title: "Tienda Oficial 3D" };
     }
     return {
-      title: `${store.name} — Tienda Oficial 3D | ReUsa PY`,
+      title: `${store.name} — Tienda Oficial 3D`,
       description:
         store.description ||
         `${store.tagline} · Explorá el showroom 3D y catálogo oficial de ${store.name}${
@@ -28,7 +28,7 @@ export async function generateMetadata({
         }.`,
     };
   } catch {
-    return { title: "Tienda Oficial — ReUsa PY" };
+    return { title: "Tienda Oficial 3D" };
   }
 }
 

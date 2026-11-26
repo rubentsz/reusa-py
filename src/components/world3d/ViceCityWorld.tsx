@@ -191,7 +191,7 @@ export function ViceCityWorld({
   );
   const [transitioning, setTransitioning] = useState(false);
   const [prompt, setPrompt] = useState<PromptState>(null);
-  const [radarState, setRadarState] = useState({ x: 0, z: 62, yaw: Math.PI });
+  const [radarState, setRadarState] = useState({ x: 0, z: 64, yaw: Math.PI });
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showKioskPanel, setShowKioskPanel] = useState(false);
@@ -230,13 +230,13 @@ export function ViceCityWorld({
   const favoriteIdsRef = useRef<Set<string>>(favoriteIds);
 
   // Spawn right at the VIP entrance of Avenida de Marcas looking North!
-  const playerPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 62));
+  const playerPosRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 64));
   const playerVelYRef = useRef<number>(0);
   const playerYawRef = useRef<number>(Math.PI);
   const camYawRef = useRef<number>(0);
   const camPitchRef = useRef<number>(0.24);
   const camDistRef = useRef<number>(8.2);
-  const currentLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.55, 62));
+  const currentLookAtRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 1.55, 64));
   const keysRef = useRef<Set<string>>(new Set());
   const joystickRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [joyVisual, setJoyVisual] = useState<{ x: number; y: number; active: boolean }>({
@@ -457,16 +457,21 @@ export function ViceCityWorld({
     const isPortrait = container.clientWidth / Math.max(1, container.clientHeight) < 0.85;
     cam.fov = isPortrait ? 68 : 56;
     cam.updateProjectionMatrix();
-    const baseDist = isInside ? (isPortrait ? 8.2 : 6.2) : isPortrait ? 11.2 : 8.2;
+    const baseDist = isInside ? (isPortrait ? 8.2 : 6.4) : isPortrait ? 11.2 : 8.2;
     camDistRef.current = baseDist;
+    camPitchRef.current = isInside ? 0.13 : 0.24;
     const horiz = Math.cos(camPitchRef.current) * baseDist;
-    const vert = Math.sin(camPitchRef.current) * baseDist + 1.9;
+    const vert = Math.sin(camPitchRef.current) * baseDist + (isInside ? 1.85 : 1.9);
     cam.position.set(
       playerPosRef.current.x + Math.sin(camYawRef.current) * horiz,
       vert,
       playerPosRef.current.z + Math.cos(camYawRef.current) * horiz
     );
-    currentLookAtRef.current.set(playerPosRef.current.x, 1.55, playerPosRef.current.z);
+    currentLookAtRef.current.set(
+      playerPosRef.current.x,
+      isInside ? 2.25 : 1.55,
+      playerPosRef.current.z
+    );
     cam.lookAt(currentLookAtRef.current);
   }, []);
 
@@ -1533,7 +1538,7 @@ export function ViceCityWorld({
         camera.position.lerp(desiredCamPos, Math.min(1, dt * 8.5));
         lookTarget.set(
           playerPosRef.current.x,
-          activeDrivenCar ? 1.15 : 1.55 + playerPosRef.current.y * 0.4,
+          activeDrivenCar ? 1.15 : (isInside ? 2.15 : 1.55) + playerPosRef.current.y * 0.4,
           playerPosRef.current.z
         );
         currentLookAtRef.current.lerp(lookTarget, Math.min(1, dt * 10));
